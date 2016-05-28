@@ -144,23 +144,23 @@ class ProbabilisticMatrixFactorization():
 
 
 
-def dynamic_rtts(df, pkt):
+def update_delay_profiles(df, slot):
  
      
-     rttDF = pd.DataFrame(numpy.nan, index= range(0,pkt.num), columns=['wifi', 'lte'] )
-     wifi_rcvd_rtt_list = df[df['feedbackreceivedWiFi'] < pkt.WiFisndtime ].index.tolist()
-     lte_rcvd_rtt_list = df[df['feedbackreceivedLTE'] < pkt.LTEsndtime ].index.tolist()
-     rttDF.wifi [ wifi_rcvd_rtt_list ] = df.feedbackreceivedWiFi [wifi_rcvd_rtt_list]
-     rttDF.lte [ lte_rcvd_rtt_list  ] =  df.feedbackreceivedLTE [lte_rcvd_rtt_list]  
+     delayDF = pd.DataFrame(numpy.nan, index= range(0,slot), columns=['wifi', 'lte'] )
+     wifi_rcvd_delay_list = df[df['feedbackreceivedWiFi'] < df.iloc [slot]['WiFiSentTimes'] ].index.tolist()
+     lte_rcvd_delay_list = df[df['feedbackreceivedLTE'] < df.iloc [slot]['LTESentTimes' ] ].index.tolist()
+     delayDF.wifi [ wifi_rcvd_delay_list ] = df.feedbackreceivedWiFi [wifi_rcvd_delay_list]
+     delayDF.lte [ lte_rcvd_delay_list  ] =  df.feedbackreceivedLTE [lte_rcvd_delay_list]  
 
-     return rttDF
+     return delayDF
 
-def list_ratings( dynamicdf ):
+def update_list_ratings( dynamicdf ):
 
      u = []
      v = []
      ratings = []
-     num_pkts = pkt.num
+     num_slots = dynamicdf.shape[0]
      num_paths = 2
      
      latent_dimension = 5
@@ -169,14 +169,14 @@ def list_ratings( dynamicdf ):
 
      num_ratings = len(dynamicdf_wifi_rated) + len(dynamicdf_lte_rated)
      # Generate the latent user and item vectors
-     for i in range(num_pkts):
+     for i in range(num_slots):
         u.append(2 * numpy.random.randn(latent_dimension))
-     for i in range(num_paths):
+     for i in range(num_slots):
         v.append(2 * numpy.random.randn(latent_dimension))
 
      # Get num_ratings ratings per user.
-     for i in range(num_pkts):
-       
+     for i in range(num_slots):
+       pdb.set_trace()
        if not ( i in dynamicdf_wifi_rated) :
            ratings.append((i,0, dynamicdf.iloc[i]['wifi']))
        if not ( i in dynamicdf_lte_rated) :    
@@ -209,7 +209,7 @@ def plot_latent_vectors(U, V):
 
  
 
-def plot_predicted_ratings(U, V):
+def predicted_ratings(U, V):
 
      r_hats = -5 * numpy.ones((U.shape[0] + U.shape[1] + 1, V.shape[0] + V.shape[1] + 1))
      for i in range(U.shape[0]):
@@ -224,18 +224,14 @@ def plot_predicted_ratings(U, V):
       for j in range(V.shape[0]):
        r_hats[i + U.shape[1] + 1, j + V.shape[1] + 1] = numpy.dot(U[i], V[j]) / 10
  
-     fig = plt.figure()
-     ax = fig.add_subplot(111)
-     ax.imshow(r_hats, cmap=cm.gray, interpolation='nearest')
-     plt.title("Predicted Ratings")
-     plt.axis("off")
+     return r_hats 
+     #fig = plt.figure()
+     #ax = fig.add_subplot(111)
+     #ax.imshow(r_hats, cmap=cm.gray, interpolation='nearest')
+     #plt.title("Predicted Ratings")
+     #plt.axis("off")
 
 
-class pkt (object):
-    num=None
-    WiFisndtime=None
-    LTEsndtime= None
-    length=1460
 
 def round_robin_scheduler(df):
      wifi_scheduled_buffer_rr= numpy.array (range (0,9999,2) )
@@ -245,11 +241,11 @@ def round_robin_scheduler(df):
      snd_rcvd_block_rr = numpy.r_ [wifi_block_rr, lte_block_rr ]
      return  snd_rcvd_block_rr
     
-def edpf_scheduler(df):
+def edpf_scheduler(df, pkt_length):
      avg_delay=numpy.asarray([numpy.mean ( df.WiFiDelayPackets) , numpy.mean (df.LTEDelayPackets )])
-     avg_bw = numpy.asarray( [ numpy.mean(1460 * 8 /  df.WiFiDelayPackets),  numpy.mean(1460 * 8 /  df.LTEDelayPackets) ] ) # avergae over bw of each packet
-     estimated_wifi_dlv_edpf = numpy.asarray ( df['WiFiSentTimes']  + pkt.length / avg_bw[0] )
-     estimated_lte_dlv_edpf = numpy.asarray ( df['LTESentTimes']  + pkt.length / avg_bw[1] )
+     avg_bw = numpy.asarray( [ numpy.mean(pkt_length * 8 /  df.WiFiDelayPackets),  numpy.mean(pkt_length * 8 /  df.LTEDelayPackets) ] ) # avergae over bw of each packet
+     estimated_wifi_dlv_edpf = numpy.asarray ( df['WiFiSentTimes']  + pkt_length / avg_bw[0] )
+     estimated_lte_dlv_edpf = numpy.asarray ( df['LTESentTimes']  + pkt_length / avg_bw[1] )
      estimated_dlv_edpf =  numpy.append (estimated_wifi_dlv_edpf, estimated_lte_dlv_edpf)
      sorted_slots= numpy.argsort(estimated_dlv_edpf, axis=-1, kind='mergesort')
      path_sorted = numpy.empty( [10000,1])
@@ -262,7 +258,7 @@ def edpf_scheduler(df):
      snd_rcvd_block_edpf = numpy.r_ [wifi_block_edpf, lte_block_edpf ]
      return  snd_rcvd_block_edpf
 
-def sdepf(df):
+
 
 def compute_expected_reordering (snd_rcvd_block):
   rcvd_block_sorted_by_seq = snd_rcvd_block [numpy.argsort(snd_rcvd_block[:, 0])]
@@ -270,7 +266,6 @@ def compute_expected_reordering (snd_rcvd_block):
   for k in range (0, rcvd_block_sorted_by_seq.shape[0]-1):
        rcvd_block_sorted_by_seq[k,-1]= max(rcvd_block_sorted_by_seq[:k+1,-2])     
   expected_reordering_delay =numpy.mean ( rcvd_block_sorted_by_seq[:,-1] - rcvd_block_sorted_by_seq[:,-3] )
-  pdb.set_trace()
   return expected_reordering_delay 
     
 if __name__ == "__main__":
@@ -278,15 +273,13 @@ if __name__ == "__main__":
      
      # initiate a list of received packet times indexed by sequence numbers
      rcvd_pkts=[]
-     dlvd_pkts_rr=[]
-     dlvd_pkts_edpf=[]
-     A=[0 , 0] #initial waiting time  per path  for edpf 
-     pstar_rr=1 #round robin scheduling start from wifi path
+    
      # read data
      df=pd.read_csv('delayData.csv')
-
+     n_slots=df.shape[0]
+     pkt_length=1440 # packet length in bytes
      #scheduling for EDPF 
-     snd_rcvd_edpf=edpf_scheduler(df)
+     snd_rcvd_edpf=edpf_scheduler(df,pkt_length)
      expected_reordering_delay_edpf=compute_expected_reordering(snd_rcvd_edpf)
      
      #scheduling for RR
@@ -299,35 +292,22 @@ if __name__ == "__main__":
      
      pdb.set_trace()
      
-     for i  in range (1,5000):
+     for i  in range (0, n_slots-1):
 
 
-
-        
-        ############Round Robin Scheduler#############
-        #sequensial packets simultaneously across each path
-        for path in range (1,2):
-           pkt.dlv = df.iloc  [i][path+1]
-           dlvd_pkts_rr.append ( pkt.dlv)
-        
-        ############### EDPF ##########################
-        pdb.set_trace()
-        
-        # next available time is after previous delivery
-        
-        # earliest path
-        p_star_edpf= estimated_dlv.index(min (dlv))
-        pkt.dlv = df.iloc [pkt.num] [p_star_edpf+2]
-        dlvd_pkts_edpf.append(pkt.dlv)
         ############## pmf ############################
-        if  seq > 19:
+        if  i > 19:
 
             # construct matrix of received delay values assuming each packet sends rtts back
-            dynamicdf = dynamic_rtts(df, pkt)      
-            (ratings, true_o, true_d) = list_ratings(dynamicdf)
+            dynamicdf = update_delay_profiles (df, i)      
+            (ratings, true_o, true_d) = update_list_ratings(dynamicdf)
 
-            #plot_ratings(ratings)
+            
             pmf = ProbabilisticMatrixFactorization(ratings, latent_d=3)
+            predicted_delays=predicted_ratings(pmf.users, pmf.items)
+
+            psb.set_trace()
+            #check to see if the map updates are done correctely
             liks = []
             while (pmf.update()):
                lik = pmf.likelihood()
@@ -339,11 +319,11 @@ if __name__ == "__main__":
             plt.xlabel("Iteration")
             plt.ylabel("Log Likelihood")
 
-            plot_latent_vectors(pmf.users, pmf.items)
-            plot_predicted_ratings(pmf.users, pmf.items)
-            plt.show()
+            #plot_latent_vectors(pmf.users, pmf.items)
+            #plot_predicted_ratings(pmf.users, pmf.items)
+            #plt.show()
 
-            pmf.print_latent_vectors()
-            pmf.save_latent_vectors("models/")
+            #pmf.print_latent_vectors()
+            #pmf.save_latent_vectors("models/")
 
         ###################### multi-armed bandit interpretation #############
