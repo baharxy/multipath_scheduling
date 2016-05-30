@@ -146,8 +146,8 @@ class ProbabilisticMatrixFactorization():
 def update_delay_profiles(df, slot):
  
      delayDF = pd.DataFrame(numpy.nan, index= range(0,slot), columns=['wifi', 'lte'] )
-     wifi_rcvd_delay_list = df[df['feedbackreceivedWiFi'] < df.iloc [slot-1]['WiFiSentTimes'] ].index.tolist()
-     lte_rcvd_delay_list = df[df['feedbackreceivedLTE'] < df.iloc [slot-1]['LTESentTimes' ] ].index.tolist()
+     wifi_rcvd_delay_list = df[df['feedbackreceivedWiFi'] < df.iloc [slot]['WiFiSentTimes'] ].index.tolist()
+     lte_rcvd_delay_list = df[df['feedbackreceivedLTE'] < df.iloc [slot]['LTESentTimes' ] ].index.tolist()
      delayDF.wifi [ wifi_rcvd_delay_list ] = df.feedbackreceivedWiFi [wifi_rcvd_delay_list]
      delayDF.lte [ lte_rcvd_delay_list  ] =  df.feedbackreceivedLTE [lte_rcvd_delay_list]  
 
@@ -164,7 +164,6 @@ def update_list_ratings( dynamicdf ):
      latent_dimension = 5
      dynamicdf_wifi_rated = dynamicdf.index[dynamicdf['wifi'].apply(numpy.isnan)]
      dynamicdf_lte_rated = dynamicdf.index[dynamicdf['lte'].apply(numpy.isnan)]
-
      num_ratings = len(dynamicdf_wifi_rated) + len(dynamicdf_lte_rated)
      # Generate the latent user and item vectors
      for i in range(num_slots):
@@ -277,8 +276,8 @@ if __name__ == "__main__":
      nof_pmf_calls = 0 
      # initialise
      nof_probes_last = 0 # to make sure that we go through pmf predictions for the first round
-                                  
-
+     nof_predictions_after_current_slot=20    # number of predicted delays that we draw from   from a normal distribution with the previous mean and sd values                
+     nof_probed_slots = 0 # start with no feedback
      
      #scheduling for EDPF
      print "EDPF scheduler running.."
@@ -291,19 +290,19 @@ if __name__ == "__main__":
      snd_rcvd_rr=round_robin_scheduler(df)
      expected_reordering_delay_rr = compute_expected_reordering(snd_rcvd_rr)
      print "Round Robin scheduler finished.Expected reordering delay is:  %f" %expected_reordering_delay_rr
-     
-     for i  in range (0, n_slots):
 
+     ############## pmf ############################
+     #start pmf from slot 5, no pint to start earlier 'casue there is no feedback
+     for i  in range (5, n_slots+1):
 
-            ############## pmf ############################
             # construct matrix of received delay values assuming each packet sends rtts back
-            dynamicdf = update_delay_profiles (df, i+1)
-            nof_probed_slots = dynamicdf.shape[0]
-            
-            if nof_probed_slots  > 50:
-                dynamicdf = dynamicdf.drop(range(0,nof_probed_slots-50+1))
+            dynamicdf = update_delay_profiles (df, i)
             (ratings, true_o, true_d) = update_list_ratings(dynamicdf)
-
+            if len(ratings) > 0 :
+                 nof_probed_slots =  int( numpy.max((numpy.array(ratings))[:,0])+1 )
+            if nof_probed_slots  >  50:
+                 dynamicdf = dynamicdf.drop(range(0,nof_probed_slots-50+1))
+            (ratings, true_o, true_d) = update_list_ratings(dynamicdf)      
             if len(ratings) - nof_probes_last  >  5: # if had 5 more probes compared to the predictions call pmf/ otherwise just copy packets across both paths
                 if nof_pmf_calls==0 :
                      # first  packets down both paths to build up some model
@@ -331,15 +330,23 @@ if __name__ == "__main__":
                    liks.append(lik)
                    #print "L=", lik
                    pass
+                predicted_ratings= numpy.dot(pmf.users, pmf.items.transpose())
+                mu_predicted=numpy.mean (predicted_ratings, axis=0)
+                sigma_predicted= numpy.std (predicted_ratings,axis=0)
                 
                 if nof_probed_slots > 50:
-                    predicted_delays_last= numpy.r_ [predicted_delays_last[:nof_probed_slots-50+1], numpy.dot(pmf.users, pmf.items.transpose())]
+                    predicted_delays_last= numpy.r_ [predicted_delays_last[:nof_probed_slots-50+1],predicted_ratings ]
+
                 else:    
-                    predicted_delays_last=numpy.dot(pmf.users, pmf.items.transpose())
-                
-               
+                    predicted_delays_last=predicted_ratings
+                   
+                    
+                nof_predicted_ratings=predicted_delays_last.shape[0]
+                nof_draws=i-nof_predicted_ratings+nof_predictions_after_current_slot
+                forward_predicted_delays=numpy.c_[numpy.random.normal(mu_predicted[0], sigma_predicted[0], nof_draws ),  numpy.random.normal(mu_predicted[1], sigma_predicted[1], nof_draws )]
+            
                 #assume i.i.d distribution of delays: copy the same delay profile for the next 20 slots
-                predicted_delays = numpy.r_ [ predicted_delays_last, predicted_delays_last[-20:,] ]
+                predicted_delays = numpy.r_ [ predicted_delays_last,forward_predicted_delays]
                 last_predicted_slot = predicted_delays.shape[0]-1
 
                 estimated_wifi_dlv_pmf= predicted_delays[i,0] + df.iloc[i:last_predicted_slot]['WiFiSentTimes']
