@@ -2,7 +2,7 @@
 def ind_max(x):
   m = max(x)
   return x.index(m)
-
+import pdb
 # Need access to random numbers
 import random
 

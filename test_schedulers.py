@@ -7,6 +7,7 @@ import pdb
 import csv
 import pandas as pd
 import timeit
+import sys
 
 class ProbabilisticMatrixFactorization():
 
@@ -144,7 +145,6 @@ class ProbabilisticMatrixFactorization():
 
 def update_delay_profiles(df, slot):
  
-     
      delayDF = pd.DataFrame(numpy.nan, index= range(0,slot), columns=['wifi', 'lte'] )
      wifi_rcvd_delay_list = df[df['feedbackreceivedWiFi'] < df.iloc [slot]['WiFiSentTimes'] ].index.tolist()
      lte_rcvd_delay_list = df[df['feedbackreceivedLTE'] < df.iloc [slot]['LTESentTimes' ] ].index.tolist()
@@ -268,26 +268,16 @@ def compute_expected_reordering (snd_rcvd_block):
 if __name__ == "__main__":
 
     
-    # read data
-     df=pd.read_csv('delayData.csv')
+     # read data
+     with open(sys.argv[1], 'r') as trace_file:
+      df=pd.read_csv(trace_file)
+     trace_file.close()
      n_slots=df.shape[0]
      pkt_length=1440 # packet length in bytes
      nof_pmf_calls = 0 
      # initialise
-     nof_probes_last = 20 # to make sure that we go through pmf predictions for the first round
-     #send first 20 packets down both paths to build up some model
-     first_arrivals_best_path= numpy.argmin ( numpy.c_ [ df.iloc[0:20]['WiFiArrivalTimes'], df.iloc[0:20]['LTEArrivalTimes'] ],  axis=1 )
-     first_sentTimes=numpy.zeros(first_arrivals_best_path.shape[0])
-     for k  in range (20): 
-       if first_arrivals_best_path[k]==0 :
-           first_sentTimes[k]= df.iloc [k]['WiFiSentTimes']
-       else:
-           first_sentTimes[k]= df.iloc [k]['LTESentTimes']
-         
-   
-     first_arrivals= numpy.minimum( df.iloc[0:20]['WiFiArrivalTimes'], df.iloc[0:20]['LTEArrivalTimes'] )
-     snd_rcvd_block_last= numpy.c_[numpy.array(range(0,20)), numpy.zeros(20) , first_sentTimes, first_arrivals ]
-                                    
+     nof_probes_last = 0 # to make sure that we go through pmf predictions for the first round
+                                  
 
      
      #scheduling for EDPF
@@ -302,22 +292,36 @@ if __name__ == "__main__":
      expected_reordering_delay_rr = compute_expected_reordering(snd_rcvd_rr)
      print "Round Robin scheduler finished.Expected reordering delay is:  %f" %expected_reordering_delay_rr
      
-     for i  in range (0, n_slots-1):
+     for i  in range (0, n_slots):
 
 
-        ############## pmf ############################
-        if  i > 19:
-
+            ############## pmf ############################
             # construct matrix of received delay values assuming each packet sends rtts back
-            dynamicdf = update_delay_profiles (df, i)
+            dynamicdf = update_delay_profiles (df, i+1)
             nof_probed_slots = dynamicdf.shape[0]
+            
             if nof_probed_slots  > 50:
                 dynamicdf = dynamicdf.drop(range(0,nof_probed_slots-50+1))
             (ratings, true_o, true_d) = update_list_ratings(dynamicdf)
 
-            if len(ratings) - nof_probes_last  >  5: # if had 5 more probes compared to the predictions
+            if len(ratings) - nof_probes_last  >  5: # if had 5 more probes compared to the predictions call pmf/ otherwise just copy packets across both paths
+                if nof_pmf_calls==0 :
+                     # first  packets down both paths to build up some model
+                     nof_duplicate_pkts=i
+                     first_arrivals_best_path= numpy.argmin ( numpy.c_ [ df.iloc[0: nof_duplicate_pkts]['WiFiArrivalTimes'], df.iloc[0: nof_duplicate_pkts]['LTEArrivalTimes'] ],  axis=1 )
+                     first_sentTimes=numpy.zeros(first_arrivals_best_path.shape[0])
+                     for k  in range (nof_duplicate_pkts): 
+                       if first_arrivals_best_path[k]==0 :
+                           first_sentTimes[k]= df.iloc [k]['WiFiSentTimes']
+                       else:
+                           first_sentTimes[k]= df.iloc [k]['LTESentTimes']
+
+
+                     first_arrivals= numpy.minimum( df.iloc[0:nof_duplicate_pkts]['WiFiArrivalTimes'], df.iloc[0:nof_duplicate_pkts]['LTEArrivalTimes'] )
+                     snd_rcvd_block_last= numpy.c_[numpy.array(range(0,nof_duplicate_pkts)), numpy.zeros(nof_duplicate_pkts) , first_sentTimes, first_arrivals ]
+
                 nof_pmf_calls= nof_pmf_calls+1
-                print "calling pmf at slot  %d for %d th time"   %(i ,nof_pmf_calls)
+                print "calling pmf at slot  %d for %dth time"   %(i ,nof_pmf_calls)
                 start_time=timeit.default_timer() # time the execution of the pmf and scheduler's sort
                 pmf = ProbabilisticMatrixFactorization(ratings, latent_d=3)
                 #check to see if the map updates are done correctely
@@ -334,7 +338,7 @@ if __name__ == "__main__":
                     predicted_delays_last=numpy.dot(pmf.users, pmf.items.transpose())
                 
                
-                #assume i.i.d distribution of delays: copy the same delay profile for the next 20 pkts
+                #assume i.i.d distribution of delays: copy the same delay profile for the next 20 slots
                 predicted_delays = numpy.r_ [ predicted_delays_last, predicted_delays_last[-20:,] ]
                 last_predicted_slot = predicted_delays.shape[0]-1
 
@@ -356,6 +360,6 @@ if __name__ == "__main__":
                 print "pmf for slot no. %d is finished in %f sec" %(i,elapsed)
 
      finished=1
-     pdb.sset_trace()
+     pdb.set_trace()
      expected_reordering_delay_pmf = compute_expected_reordering(snd_rcvd_block_last)
 

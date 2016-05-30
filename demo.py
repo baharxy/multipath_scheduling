@@ -29,6 +29,7 @@ for algo in algos:
 for t in range(1000):
   for algo in algos:
     chosen_arm = algo.select_arm()
+    pdb.set_trace()
     reward = arms[chosen_arm].draw()
     algo.update(chosen_arm, reward)
 
@@ -45,4 +46,5 @@ algo4.weights
 
 num_sims = 1000
 horizon = 10
+pdb.set_trace()
 results = test_algorithm(algo1, arms, num_sims, horizon)
