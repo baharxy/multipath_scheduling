@@ -13,7 +13,7 @@ class ProbabilisticMatrixFactorization():
 
     def __init__(self, rating_tuples, latent_d=1):
        self.latent_d = latent_d
-       self.learning_rate = .0001
+       self.learning_rate = .001
        self.regularization_strength = 0.1
        self.ratings = numpy.array(rating_tuples).astype(float)
        self.converged = False
@@ -66,7 +66,7 @@ class ProbabilisticMatrixFactorization():
              weight = 1
           elif len(rating_tuple) == 4:
              (i, j, rating, weight) = rating_tuple
-
+          
           r_hat = numpy.sum(self.users[i] * self.items[j])
 
           for d in range(self.latent_d):
@@ -82,7 +82,7 @@ class ProbabilisticMatrixFactorization():
               if final_lik > initial_lik:
                  self.apply_updates(updates_o, updates_d)
                  self.learning_rate *= 1.25
-                 if final_lik - initial_lik < .05:
+                 if final_lik - initial_lik < .01:
                     self.converged = True
                  break
               else:
@@ -90,7 +90,7 @@ class ProbabilisticMatrixFactorization():
                  self.undo_updates()
               if self.learning_rate < 1e-10:
                  self.converged = True
-
+        
         return not self.converged
 
     def apply_updates(self, updates_o, updates_d):

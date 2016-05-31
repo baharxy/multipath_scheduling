@@ -27,16 +27,16 @@ def update_list_ratings( dynamicdf ):
 
      u = []
      v = []
-     ratings = []
-     num_slots = dynamicdf.shape[0]
-     num_paths = 2
+     ratings = [] #delays
+     num_slots = dynamicdf.shape[0] #items
+     num_paths = 2 #users
      
-     latent_dimension = 5
+     latent_dimension = 4
      dynamicdf_wifi_rated = dynamicdf.index[dynamicdf['wifi'].apply(numpy.isnan)]
      dynamicdf_lte_rated = dynamicdf.index[dynamicdf['lte'].apply(numpy.isnan)]
      num_ratings = len(dynamicdf_wifi_rated) + len(dynamicdf_lte_rated)
      # Generate the latent user and item vectors
-     for i in range(num_slots):
+     for i in range(num_paths):
         u.append(2 * numpy.random.randn(latent_dimension))
      for i in range(num_slots):
         v.append(2 * numpy.random.randn(latent_dimension))
@@ -44,9 +44,9 @@ def update_list_ratings( dynamicdf ):
      # Get num_ratings ratings per user.
      for i in range(num_slots):
        if not ( i in dynamicdf_wifi_rated) :
-           ratings.append((i,0, dynamicdf.iloc[i]['wifi']))
+           ratings.append((0,i, dynamicdf.iloc[i]['wifi']))
        if not ( i in dynamicdf_lte_rated) :    
-           ratings.append((i,1, dynamicdf.iloc [i]['lte']))
+           ratings.append((1,i, dynamicdf.iloc [i]['lte']))
           
      return (ratings, u, v)
      
@@ -172,6 +172,7 @@ if __name__ == "__main__":
                  nof_probed_slots =  int( numpy.max((numpy.array(ratings))[:,0])+1 )
             if nof_probed_slots  >  50:
                  dynamicdf = dynamicdf.drop(range(0,nof_probed_slots-50+1))
+            
             (ratings, true_o, true_d) = update_list_ratings(dynamicdf)      
             if len(ratings) - nof_probes_last  >  5: # if had 5 more probes compared to the predictions call pmf/ otherwise just copy packets across both paths
                 if nof_pmf_calls==0 :
@@ -192,7 +193,7 @@ if __name__ == "__main__":
                 nof_pmf_calls= nof_pmf_calls+1
                 print "calling pmf at slot  %d for %dth time"   %(i ,nof_pmf_calls)
                 start_time=timeit.default_timer() # time the execution of the pmf and scheduler's sort
-                pmf_instance = ProbabilisticMatrixFactorization(ratings, latent_d=3)
+                pmf_instance = ProbabilisticMatrixFactorization( ratings, latent_d=4)
                 #check to see if the map updates are done correctely
                 liks = []
                 while (pmf_instance.update()):
@@ -200,7 +201,7 @@ if __name__ == "__main__":
                    liks.append(lik)
                    #print "L=", lik
                    pass
-                predicted_ratings= numpy.dot(pmf_instance.users, pmf_instance.items.transpose())
+                predicted_ratings= numpy.transpose (numpy.dot(pmf_instance.users, pmf_instance.items.transpose()))
                 mu_predicted=numpy.mean (predicted_ratings, axis=0)
                 sigma_predicted= numpy.std (predicted_ratings,axis=0)
                 
@@ -235,6 +236,7 @@ if __name__ == "__main__":
                 nof_probs_last=  len(ratings)
                 elapsed=timeit.default_timer() - start_time
                 print "pmf for slot no. %d is finished in %f sec" %(i,elapsed)
+                
 
      finished=1
      pdb.set_trace()
