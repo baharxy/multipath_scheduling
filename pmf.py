@@ -39,7 +39,7 @@ class ProbabilisticMatrixFactorization():
               weight = 1
            elif len(rating_tuple) == 4:
               (i, j, rating, weight) = rating_tuple
-
+           
            r_hat = numpy.sum(users[i] * items[j])
            sq_error += weight * (rating - r_hat)**2
 
