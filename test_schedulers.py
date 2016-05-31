@@ -235,7 +235,7 @@ if __name__ == "__main__":
                 snd_rcvd_block_last=numpy.r_ [ snd_rcvd_block_last [ snd_rcvd_block_last[:,0] < i , ]  , snd_rcvd_block_pmf ]
                 nof_probs_last=  len(ratings)
                 elapsed=timeit.default_timer() - start_time
-                print "pmf for slot no. %d is finished in %f sec" %(i,elapsed)
+                print "pmf for slot no. %d is finished in %f sec with likelihood %f" %(i,elapsed, lik)
                 
 
      finished=1

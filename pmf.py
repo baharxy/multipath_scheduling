@@ -52,8 +52,8 @@ class ProbabilisticMatrixFactorization():
           for d in range(self.latent_d):
              L2_norm += items[i, d]**2
 
-         return -sq_error - self.regularization_strength * L2_norm
-
+         #return -sq_error - self.regularization_strength * L2_norm
+         return -sq_error
 
     def update(self):
 
