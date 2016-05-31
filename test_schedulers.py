@@ -18,8 +18,8 @@ def update_delay_profiles(df, slot):
      delayDF = pd.DataFrame(numpy.nan, index= range(0,slot), columns=['wifi', 'lte'] )
      wifi_rcvd_delay_list = df[df['feedbackreceivedWiFi'] < df.iloc [slot]['WiFiSentTimes'] ].index.tolist()
      lte_rcvd_delay_list = df[df['feedbackreceivedLTE'] < df.iloc [slot]['LTESentTimes' ] ].index.tolist()
-     delayDF.wifi [ wifi_rcvd_delay_list ] = df.feedbackreceivedWiFi [wifi_rcvd_delay_list]
-     delayDF.lte [ lte_rcvd_delay_list  ] =  df.feedbackreceivedLTE [lte_rcvd_delay_list]  
+     delayDF.wifi [ wifi_rcvd_delay_list ] = df.WiFiDelayPackets [wifi_rcvd_delay_list]
+     delayDF.lte [ lte_rcvd_delay_list  ] =  df.LTEDelayPackets [lte_rcvd_delay_list]  
 
      return delayDF
 
