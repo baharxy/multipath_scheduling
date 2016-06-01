@@ -141,3 +141,25 @@ class ProbabilisticMatrixFactorization():
         self.items.dump(prefix + "%sd_items.pickle" % self.latent_d)
 
 
+         
+def plot_ratings(ratings):
+   xs = []
+   ys = []
+   for i in range(len(ratings)):
+    xs.append(ratings[i][1])
+    ys.append(ratings[i][2])
+   pylab.plot(xs, ys, 'bx')
+   pylab.show()
+ 
+
+def plot_latent_vectors(U, V):
+   fig = plt.figure()
+   ax = fig.add_subplot(121)
+   cmap = cm.jet
+   ax.imshow(U, cmap=cmap, interpolation='nearest')
+   plt.title("Users")
+   plt.axis("off")
+   ax = fig.add_subplot(122)
+   ax.imshow(V, cmap=cmap, interpolation='nearest')
+   plt.title("Items")
+   plt.axis("off")
