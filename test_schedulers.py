@@ -190,7 +190,7 @@ if __name__ == "__main__":
                  dynamicdf = update_delay_profiles (  duplicates_df, send_times, snd_rcvd_block_last[nof_duplicate_pkts:i,:], i,  nof_duplicate_pkts)
             (ratings, true_o, true_d) = update_list_ratings(dynamicdf)
             if len(ratings) > 0 :
-                 nof_probed_slots =  int( numpy.max((numpy.array(ratings))[:,0])+1 )
+                 nof_probed_slots =  int( numpy.max((numpy.array(ratings))[:,1])+1 )
             if nof_probed_slots  >  50:
                  dynamicdf = dynamicdf.drop(range(0,nof_probed_slots-50+1))
             
