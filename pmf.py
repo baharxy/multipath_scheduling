@@ -13,7 +13,7 @@ class ProbabilisticMatrixFactorization():
 
     def __init__(self, rating_tuples, latent_d=1):
        self.latent_d = latent_d
-       self.learning_rate = .001
+       self.learning_rate = .0001
        self.regularization_strength = 0.1
        self.ratings = numpy.array(rating_tuples).astype(float)
        self.converged = False
