@@ -158,7 +158,8 @@ if __name__ == "__main__":
      with open(sys.argv[1], 'r') as trace_file:
       df=pd.read_csv(trace_file)
      trace_file.close()
-     
+     #replace na values with means (i.e. packet losses are taken care of with some coding process)
+     pdb.set_trace()
      n_slots=df.shape[0]
      pkt_length=1440 # packet length in bytes
      nof_pmf_calls = 0 
@@ -246,8 +247,6 @@ if __name__ == "__main__":
                     
                 nof_predicted_ratings=predicted_delays_last.shape[0]
                 nof_draws=s_i-nof_predicted_ratings+nof_predictions_after_current_slot
-                if s_i==112:
-                          pdb.set_trace()
                 forward_predicted_delays=numpy.c_[numpy.random.normal(mu_predicted[0], sigma_predicted[0], nof_draws ),  numpy.random.normal(mu_predicted[1], sigma_predicted[1], nof_draws )]
             
                 #assume i.i.d distribution of delays: copy the same delay profile for the next 20 slots

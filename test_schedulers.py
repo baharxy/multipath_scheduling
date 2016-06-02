@@ -158,7 +158,11 @@ if __name__ == "__main__":
      with open(sys.argv[1], 'r') as trace_file:
       df=pd.read_csv(trace_file)
      trace_file.close()
-     
+     #replace na values with previous (i.e. packet losses are taken care of with some coding process, valid?)
+     df.loc[df[pd.isnull(df['WiFiDelayPackets'])].index,'WiFiDelayPackets']=df.loc[df[pd.isnull(df['WiFiDelayPackets'])].index-1, 'WiFiDelayPackets' ] 
+     df.loc[df[pd.isnull(df['LTEDelayPackets'])].index,'LTEDelayPackets']=df.loc[df[pd.isnull(df['LTEDelayPackets'])].index-1, 'LTEDelayPackets' ] 
+     df.loc[df[pd.isnull(df['WiFiArrivalTimes'])].index,'WiFiArrivalTimes']=df.loc[df[pd.isnull(df['WiFiArrivalTimes'])].index, 'WiFiSentTimes' ] + df.loc[df[pd.isnull(df['WiFiArrivalTimes'])].index-1, 'WiFiDelayPackets' ] 
+     df.loc[df[pd.isnull(df['LTEArrivalTimes'])].index,'LTEArrivalTimes']=df.loc[df[pd.isnull(df['LTEArrivalTimes'])].index, 'LTESentTimes' ] + df.loc[df[pd.isnull(df['LTEArrivalTimes'])].index-1, 'LTEDelayPackets' ] 
      n_slots=df.shape[0]
      pkt_length=1440 # packet length in bytes
      nof_pmf_calls = 0 
