@@ -159,8 +159,8 @@ def edpf_scheduler(df, pkt_length):
 def compute_expected_reordering (snd_rcvd_block):
   rcvd_block_sorted_by_seq = snd_rcvd_block [numpy.argsort(snd_rcvd_block[:, 0])]
   rcvd_block_sorted_by_seq = numpy.c_ [ rcvd_block_sorted_by_seq, numpy.asarray (numpy.zeros((rcvd_block_sorted_by_seq.shape[0],1)))]
-  for k in range (0, rcvd_block_sorted_by_seq.shape[0]-1):
-       rcvd_block_sorted_by_seq[k,-1]= max(rcvd_block_sorted_by_seq[:k+1,-2])     
+  for k in range (0, rcvd_block_sorted_by_seq.shape[0]):
+       rcvd_block_sorted_by_seq[k,-1]= numpy.max(rcvd_block_sorted_by_seq[:k+1,-2])     
   expected_reordering_delay =numpy.mean ( rcvd_block_sorted_by_seq[:,-1] - rcvd_block_sorted_by_seq[:,-3] )
   return expected_reordering_delay 
     
@@ -197,6 +197,7 @@ if __name__ == "__main__":
      n_slots=df.shape[0]
      pkt_length=1440 # packet length in bytes
      nof_pmf_calls = 0 
+     max_nof_predictions_pmf=100
      # initialise pmf
      nof_probes_last = 0 # to make sure that we go through pmf predictions for the first round
      nof_predictions_after_current_slot=20    # number of predicted delays that we draw from   from a normal distribution with the previous mean and sd values    (block length)            
@@ -229,8 +230,8 @@ if __name__ == "__main__":
             if len(ratings) > 0 :
                  nof_probed_slots =  int( numpy.max((numpy.array(ratings))[:,1])+1 )
      
-            if nof_probed_slots  >  50:
-                 dynamicdf = dynamicdf.drop(range(0,nof_probed_slots-50+1))
+            if nof_probed_slots  >  max_nof_predictions_pmf:
+                 dynamicdf = dynamicdf.drop(range(0,nof_probed_slots-max_nof_predictions_pmf+1))
             (ratings, true_o, true_d) = update_list_ratings(dynamicdf)      
             if len(ratings) - nof_probes_last  >  5: # if had 5 more probes compared to the predictions call pmf/ otherwise just copy packets across both paths
                 if nof_pmf_calls==0 :
@@ -279,8 +280,11 @@ if __name__ == "__main__":
                 mu_predicted=numpy.mean (predicted_ratings, axis=0)
                 sigma_predicted= numpy.std (predicted_ratings,axis=0)
                 
-                if nof_probed_slots > 50:
-                    predicted_delays_last= numpy.r_ [predicted_delays_last[:nof_probed_slots-50+1],predicted_ratings ]
+                if nof_probed_slots > max_nof_predictions_pmf:
+                    if nof_pmf_calls==1 :
+                       predicted_delays_last=predicted_ratings
+                    else:
+                       predicted_delays_last= numpy.r_ [predicted_delays_last[:nof_probed_slots-max_nof_predictions_pmf+1],predicted_ratings ]
                 else:    
                     predicted_delays_last=predicted_ratings
                    
@@ -297,6 +301,8 @@ if __name__ == "__main__":
                 estimated_lte_dlv_pmf = predicted_delays[s_i,1] + df.iloc[s_i:last_predicted_slot]['LTESentTimes']
                 estimated_dlv_pmf=  numpy.append (estimated_wifi_dlv_pmf, estimated_lte_dlv_pmf) 
                 sorted_slots_pmf= numpy.argsort(estimated_dlv_pmf, axis=-1, kind='mergesort')
+                if s_i==638:
+                          pdb.set_trace()
                 path_sorted_pmf = numpy.empty( [sorted_slots_pmf.shape[0],1])
                 path_sorted_pmf [ sorted_slots_pmf < estimated_wifi_dlv_pmf.shape[0]  ] = 0
                 path_sorted_pmf [sorted_slots_pmf >= estimated_wifi_dlv_pmf.shape[0] ] = 1
