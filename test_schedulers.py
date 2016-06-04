@@ -159,8 +159,8 @@ def edpf_scheduler(df, pkt_length):
 def compute_expected_reordering (snd_rcvd_block):
   rcvd_block_sorted_by_seq = snd_rcvd_block [numpy.argsort(snd_rcvd_block[:, 0])]
   rcvd_block_sorted_by_seq = numpy.c_ [ rcvd_block_sorted_by_seq, numpy.asarray (numpy.zeros((rcvd_block_sorted_by_seq.shape[0],1)))]
-  for k in range (0, rcvd_block_sorted_by_seq.shape[0]-1):
-       rcvd_block_sorted_by_seq[k,-1]= max(rcvd_block_sorted_by_seq[:k+1,-2])     
+  for k in range (0, rcvd_block_sorted_by_seq.shape[0]):
+       rcvd_block_sorted_by_seq[k,-1]= numpy.max(rcvd_block_sorted_by_seq[:k+1,-2])     
   expected_reordering_delay =numpy.mean ( rcvd_block_sorted_by_seq[:,-1] - rcvd_block_sorted_by_seq[:,-3] )
   return expected_reordering_delay 
     
