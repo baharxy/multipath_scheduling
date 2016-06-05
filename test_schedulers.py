@@ -131,9 +131,9 @@ def edpf_scheduler(df, pkt_length):
      path_sorted [ sorted_slots < 5000] = 0
      path_sorted [sorted_slots >= 5000] = 1
      wifi_scheduled_buffer_edpf = numpy.where(path_sorted == 0 )[0]
-     wifi_block_edpf = numpy.c_[wifi_scheduled_buffer_edpf, estimated_wifi_dlv_edpf, df['WiFiSentTimes'], df['WiFiArrivalTimes'] ]
+     wifi_block_edpf = numpy.c_[wifi_scheduled_buffer_edpf, numpy.zeros((wifi_scheduled_buffer_edpf.shape[0], 1)), estimated_wifi_dlv_edpf, df['WiFiSentTimes'], df['WiFiArrivalTimes'] ]
      lte_scheduled_buffer_edpf = numpy.where (path_sorted ==1 ) [0]
-     lte_block_edpf= numpy.c_[lte_scheduled_buffer_edpf, estimated_lte_dlv_edpf, df['LTESentTimes'], df['LTEArrivalTimes'] ]
+     lte_block_edpf= numpy.c_[lte_scheduled_buffer_edpf, numpy.ones((lte_scheduled_buffer_edpf.shape[0], 1)),estimated_lte_dlv_edpf, df['LTESentTimes'], df['LTEArrivalTimes'] ]
      snd_rcvd_block_edpf = numpy.r_ [wifi_block_edpf, lte_block_edpf ]
      return  snd_rcvd_block_edpf
 
@@ -209,7 +209,7 @@ if __name__ == "__main__":
      df.loc[df[pd.isnull(df['LTEArrivalTimes'])].index,'LTEArrivalTimes']= lte_arrival_padding_list
      
      # initialise 
-     n_slots=df.shape[0]
+     n_slots=df.shape[0]*2 # now the bw is twiced
      pkt_length=1440 # packet length in bytes
      nof_pmf_calls = 0 
      max_nof_predictions_pmf=100
@@ -224,7 +224,7 @@ if __name__ == "__main__":
      print "EDPF scheduler running.."
      snd_rcvd_edpf=edpf_scheduler(df,pkt_length)
      expected_reordering_delay[n_runs-1,1]=compute_expected_reordering(snd_rcvd_edpf)
-     RMSE[n_runs-1,1]=numpy.sqrt(numpy.mean((snd_rcvd_edpf[:5000,1]-snd_rcvd_edpf[:5000,3])**2))
+     RMSE[n_runs-1,0]=numpy.sqrt(numpy.mean((snd_rcvd_edpf[:,1]-snd_rcvd_edpf[:,3])**2))
      print "EDPF scheduler finished. Expected reordering delay is:  %f" %expected_reordering_delay[n_runs-1,1]
 
      #scheduling for RR
@@ -306,11 +306,11 @@ if __name__ == "__main__":
                 else:    
                     predicted_delays_last=predicted_ratings
                    
-                    
+                  
                 nof_predicted_ratings=predicted_delays_last.shape[0]
                 nof_draws=s_i-nof_predicted_ratings+nof_predictions_after_current_slot
                 forward_predicted_delays=numpy.c_[numpy.random.normal(mu_predicted[0], sigma_predicted[0], nof_draws ),  numpy.random.normal(mu_predicted[1], sigma_predicted[1], nof_draws )]
-            
+                forward_predicted_delays[ forward_predicted_delays <0 ]=0 # truncate negative samples
                 #assume (block) i.i.d distribution of delays: draw next delays from the same normal distribution
                 predicted_delays_pmf = numpy.r_ [ predicted_delays_last,forward_predicted_delays]
 
@@ -330,14 +330,28 @@ if __name__ == "__main__":
                 #MA sorting
                 snd_rcvd_block_ma = sort_block_packets(predicted_delays_ma,s_i, df)
                 snd_rcvd_block_last_ma=numpy.r_ [ snd_rcvd_block_last_ma [ snd_rcvd_block_last_ma[:,0] < s_i , ]  , snd_rcvd_block_ma ]
-                elapsed_ma=timeit.default_timer() - start_time
-                print "MA for slot no. %d is finished in %f sec" %(s_i,elapsed)
+                elapsed_ma=timeit.default_timer() - start_time_ma
+                print "MA for slot no. %d is finished in %f sec" %(s_i,elapsed_ma)
      finished=1
      pdb.set_trace()
-     expected_reordering_delay[n_runa-1,2] = compute_expected_reordering(snd_rcvd_block_last[:5000])
-     expected_reordering_delay[n_runa-1,3] = compute_expected_reordering(snd_rcvd_block_last_ma[:5000])
-     RMSE[n_runs-1, 1]= numpy.sqrt(numpy.mean((snd_rcvd_block_last[:5000,2]-snd_rcvd_block_last[:5000,4])**2))
-     RMSE[n_runs-1, 2]=numpy.sqrt(numpy.mean((snd_rcvd_block_last_ma[:5000,2]-snd_rcvd_block_last_ma[:5000,4])**2))
+     expected_reordering_delay[n_runs-1,2] = compute_expected_reordering(snd_rcvd_block_last[:n_slots])
+     expected_reordering_delay[n_runs-1,3] = compute_expected_reordering(snd_rcvd_block_last_ma[:n_slots])
+     RMSE[n_runs-1, 1]= numpy.sqrt(numpy.mean((snd_rcvd_block_last[:n_slots,2]-snd_rcvd_block_last[:n_slots,4])**2))
+     RMSE[n_runs-1, 2]=numpy.sqrt(numpy.mean((snd_rcvd_block_last_ma[:n_slots,2]-snd_rcvd_block_last_ma[:n_slots,4])**2))
 
 
+     pmf_data=snd_rcvd_block_last[:n_slots]
+     ma_data=snd_rcvd_block_last_ma[:n_slots]
+     edpf_data=snd_rcvd_edpf[:n_slots] # for now because comparing with the same number of packets for pmf
+     # plot packet no. vs. its  r
+     plt.scatter(pmf_data[:,0], pmf_data[:,-1],color='k')
+     plt.scatter(edpf_data[:,0], edpf_data[:,-1],color='g')
+     plt.scatter(ma_data[:,0], ma_data[:,-1],color='r')
+     plt.show()
+
+     # plot packet no. vs. its  r
+     plt.scatter(pmf_data[:,-2], pmf_data[:,1],color='k')
+     plt.scatter(edpf_data[:,-2], edpf_data[:,1],color='g')
+     plt.scatter(ma_data[:,-2], ma_data[:,1],color='r')
+     plt.show()
 
