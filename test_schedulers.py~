@@ -154,7 +154,22 @@ def edpf_scheduler(df, pkt_length):
    #estimate_reoedering_lte=guassian_appx ([Y_wifi[0], Y_LTE[0], a_slot_lte[0] ],[Y_wifi[1], Y_lte[1], a_slot_lte[1]])
    #numpy.minimum ( estimate_reoedering_wifi
 
-   
+# sort packets transmission times over paths so that they arrive in order
+def sort_block_packets(predicted_delays,s_i, df):
+   last_predicted_slot = predicted_delays.shape[0]-1
+   estimated_wifi_dlv= predicted_delays[s_i,0] + df.iloc[s_i:last_predicted_slot]['WiFiSentTimes']
+   estimated_lte_dlv = predicted_delays[s_i,1] + df.iloc[s_i:last_predicted_slot]['LTESentTimes']
+   estimated_dlv=  numpy.append (estimated_wifi_dlv, estimated_lte_dlv) 
+   sorted_slots= numpy.argsort(estimated_dlv, axis=-1, kind='mergesort')
+   path_sorted = numpy.empty( [sorted_slots.shape[0],1])
+   path_sorted [ sorted_slots < estimated_wifi_dlv.shape[0]  ] = 0
+   path_sorted [sorted_slots >= estimated_wifi_dlv.shape[0] ] = 1
+   wifi_scheduled_buffer = numpy.where(path_sorted == 0 )[0] + s_i
+   wifi_block= numpy.c_[wifi_scheduled_buffer, numpy.zeros(wifi_scheduled_buffer.shape[0]),  estimated_wifi_dlv, df.iloc[s_i:last_predicted_slot]['WiFiSentTimes'], df.iloc[s_i:last_predicted_slot]['WiFiArrivalTimes'] ]
+   lte_scheduled_buffer = numpy.where (path_sorted ==1 ) [0] + s_i
+   lte_block= numpy.c_[lte_scheduled_buffer, numpy.ones(lte_scheduled_buffer.shape[0]), estimated_lte_dlv, df.iloc[s_i:last_predicted_slot]['LTESentTimes'], df.iloc[s_i:last_predicted_slot]['LTEArrivalTimes'] ]
+   snd_rcvd_block = numpy.r_ [wifi_block, lte_block]
+   return snd_rcvd_block
 #just computes the reordering delays based on different schedules   
 def compute_expected_reordering (snd_rcvd_block):
   rcvd_block_sorted_by_seq = snd_rcvd_block [numpy.argsort(snd_rcvd_block[:, 0])]
@@ -188,33 +203,36 @@ if __name__ == "__main__":
      for iwl in second_nan_idx_lte:
          lte_arrival_padding_list[iwl]=lte_arrival_padding_list[iwl-1]
 
-    
      df.loc[df[pd.isnull(df['WiFiDelayPackets'])].index,'WiFiDelayPackets']= wifi_delay_padding_list
      df.loc[df[pd.isnull(df['LTEDelayPackets'])].index,'LTEDelayPackets']= lte_delay_padding_list
      df.loc[df[pd.isnull(df['WiFiArrivalTimes'])].index,'WiFiArrivalTimes']= wifi_arrival_padding_list
      df.loc[df[pd.isnull(df['LTEArrivalTimes'])].index,'LTEArrivalTimes']= lte_arrival_padding_list
      
+     # initialise 
      n_slots=df.shape[0]
      pkt_length=1440 # packet length in bytes
      nof_pmf_calls = 0 
      max_nof_predictions_pmf=100
-     # initialise pmf
      nof_probes_last = 0 # to make sure that we go through pmf predictions for the first round
-     nof_predictions_after_current_slot=20    # number of predicted delays that we draw from   from a normal distribution with the previous mean and sd values    (block length)            
+     nof_predictions_after_current_slot=20 # number of predicted delays that    (block length)            
      nof_probed_slots = 0 # start with no feedback
-     
+     n_runs=1
+     n_schedulers=4
+     expected_reordering_delay = numpy.zeros((n_runs, n_schedulers ))
+     RMSE = numpy.zeros((n_runs, n_schedulers-1 ))
      #scheduling for EDPF
      print "EDPF scheduler running.."
      snd_rcvd_edpf=edpf_scheduler(df,pkt_length)
-     expected_reordering_delay_edpf=compute_expected_reordering(snd_rcvd_edpf)
-     print "EDPF scheduler finished. Expected reordering delay is:  %f" %expected_reordering_delay_edpf
+     expected_reordering_delay[n_runs-1,1]=compute_expected_reordering(snd_rcvd_edpf)
+     RMSE[n_runs-1,1]=numpy.sqrt(numpy.mean((snd_rcvd_edpf[:5000,1]-snd_rcvd_edpf[:5000,3])**2))
+     print "EDPF scheduler finished. Expected reordering delay is:  %f" %expected_reordering_delay[n_runs-1,1]
 
      #scheduling for RR
      print "Round Robin scheduler running.. "
      snd_rcvd_rr=round_robin_scheduler(df)
-     expected_reordering_delay_rr = compute_expected_reordering(snd_rcvd_rr)
+     expected_reordering_delay[n_runs-1,0] = compute_expected_reordering(snd_rcvd_rr)
      print "Round Robin scheduler finished.Expected reordering delay is:  %f" %expected_reordering_delay_rr
-
+ 
     
      for s_i  in range (5, n_slots):
 
@@ -294,54 +312,32 @@ if __name__ == "__main__":
                 forward_predicted_delays=numpy.c_[numpy.random.normal(mu_predicted[0], sigma_predicted[0], nof_draws ),  numpy.random.normal(mu_predicted[1], sigma_predicted[1], nof_draws )]
             
                 #assume (block) i.i.d distribution of delays: draw next delays from the same normal distribution
-                predicted_delays = numpy.r_ [ predicted_delays_last,forward_predicted_delays]
-                last_predicted_slot = predicted_delays.shape[0]-1
+                predicted_delays_pmf = numpy.r_ [ predicted_delays_last,forward_predicted_delays]
+
                 #pmf sorting
-                estimated_wifi_dlv_pmf= predicted_delays[s_i,0] + df.iloc[s_i:last_predicted_slot]['WiFiSentTimes']
-                estimated_lte_dlv_pmf = predicted_delays[s_i,1] + df.iloc[s_i:last_predicted_slot]['LTESentTimes']
-                estimated_dlv_pmf=  numpy.append (estimated_wifi_dlv_pmf, estimated_lte_dlv_pmf) 
-                sorted_slots_pmf= numpy.argsort(estimated_dlv_pmf, axis=-1, kind='mergesort')
-                if s_i==638:
-                          pdb.set_trace()
-                path_sorted_pmf = numpy.empty( [sorted_slots_pmf.shape[0],1])
-                path_sorted_pmf [ sorted_slots_pmf < estimated_wifi_dlv_pmf.shape[0]  ] = 0
-                path_sorted_pmf [sorted_slots_pmf >= estimated_wifi_dlv_pmf.shape[0] ] = 1
-                wifi_scheduled_buffer_pmf = numpy.where(path_sorted_pmf == 0 )[0] + s_i
-                wifi_block_pmf = numpy.c_[wifi_scheduled_buffer_pmf, numpy.zeros(wifi_scheduled_buffer_pmf.shape[0]),  estimated_wifi_dlv_pmf, df.iloc[s_i:last_predicted_slot]['WiFiSentTimes'], df.iloc[s_i:last_predicted_slot]['WiFiArrivalTimes'] ]
-                lte_scheduled_buffer_pmf = numpy.where (path_sorted_pmf ==1 ) [0] + s_i
-                lte_block_pmf= numpy.c_[lte_scheduled_buffer_pmf, numpy.ones(lte_scheduled_buffer_pmf.shape[0]), estimated_lte_dlv_pmf, df.iloc[s_i:last_predicted_slot]['LTESentTimes'], df.iloc[s_i:last_predicted_slot]['LTEArrivalTimes'] ]
-                snd_rcvd_block_pmf = numpy.r_ [wifi_block_pmf, lte_block_pmf]
+                snd_rcvd_block_pmf = sort_block_packets(predicted_delays_pmf,s_i, df)
                 snd_rcvd_block_last=numpy.r_ [ snd_rcvd_block_last [ snd_rcvd_block_last[:,0] < s_i , ]  , snd_rcvd_block_pmf ]
                 nof_probs_last=  len(ratings)
                 elapsed=timeit.default_timer() - start_time
                 print "pmf for slot no. %d is finished in %f sec with likelihood %f" %(s_i,elapsed, lik)
                 
                 # calling Moving averages
+                start_time_ma=timeit.default_timer() # time the execution of the ma and scheduler's sort
                 print "calling ma at slot  %d for %dth time"   %(s_i ,nof_pmf_calls)
                 allRcvd= delay_profiles (  df, s_i)
                 predicted_delays_ma= moving_average(allRcvd, s_i, nof_predictions_after_current_slot)
                 last_predicted_slot_ma=predicted_delays_ma.shape[0]-1
                 #MA sorting
-                estimated_wifi_dlv_ma= predicted_delays_ma[s_i,0] + df.iloc[s_i:last_predicted_slot_ma]['WiFiSentTimes']
-                estimated_lte_dlv_ma = predicted_delays_ma[s_i,1] + df.iloc[s_i:last_predicted_slot_ma]['LTESentTimes']
-                estimated_dlv_ma=  numpy.append (estimated_wifi_dlv_ma, estimated_lte_dlv_ma) 
-                sorted_slots_ma= numpy.argsort(estimated_dlv_ma, axis=-1, kind='mergesort')
-                path_sorted_ma = numpy.empty( [sorted_slots_ma.shape[0],1])
-                path_sorted_ma [ sorted_slots_ma < estimated_wifi_dlv_ma.shape[0]  ] = 0
-                path_sorted_ma [sorted_slots_ma >= estimated_wifi_dlv_ma.shape[0] ] = 1
-                wifi_scheduled_buffer_ma = numpy.where(path_sorted_ma == 0 )[0] + s_i
-                wifi_block_ma = numpy.c_[wifi_scheduled_buffer_ma, numpy.zeros(wifi_scheduled_buffer_ma.shape[0]),  estimated_wifi_dlv_ma, df.iloc[s_i:last_predicted_slot_ma]['WiFiSentTimes'], df.iloc[s_i:last_predicted_slot_ma]['WiFiArrivalTimes'] ]
-                lte_scheduled_buffer_ma = numpy.where (path_sorted_ma ==1 ) [0] + s_i
-                lte_block_ma= numpy.c_[lte_scheduled_buffer_ma, numpy.ones(lte_scheduled_buffer_ma.shape[0]), estimated_lte_dlv_ma, df.iloc[s_i:last_predicted_slot_ma]['LTESentTimes'], df.iloc[s_i:last_predicted_slot_ma]['LTEArrivalTimes'] ]
-                snd_rcvd_block_ma = numpy.r_ [wifi_block_ma, lte_block_ma]
+                snd_rcvd_block_ma = sort_block_packets(predicted_delays_ma,s_i, df)
                 snd_rcvd_block_last_ma=numpy.r_ [ snd_rcvd_block_last_ma [ snd_rcvd_block_last_ma[:,0] < s_i , ]  , snd_rcvd_block_ma ]
-
+                elapsed_ma=timeit.default_timer() - start_time
+                print "MA for slot no. %d is finished in %f sec" %(s_i,elapsed)
      finished=1
      pdb.set_trace()
-     expected_reordering_delay_pmf = compute_expected_reordering(snd_rcvd_block_last[:5000])
-     expected_reordering_delay_ma = compute_expected_reordering(snd_rcvd_block_last_ma[:5000])
-     numpy.sqrt(numpy.mean((snd_rcvd_block_last[:5000,2]-snd_rcvd_block_last[:5000,4])**2))
-     numpy.sqrt(numpy.mean((snd_rcvd_block_last_ma[:5000,2]-snd_rcvd_block_last_ma[:5000,4])**2))
-     numpy.sqrt(numpy.mean((snd_rcvd_edpf[:5000,1]-snd_rcvd_edpf[:5000,3])**2))
+     expected_reordering_delay[n_runa-1,2] = compute_expected_reordering(snd_rcvd_block_last[:5000])
+     expected_reordering_delay[n_runa-1,3] = compute_expected_reordering(snd_rcvd_block_last_ma[:5000])
+     RMSE[n_runs-1, 1]= numpy.sqrt(numpy.mean((snd_rcvd_block_last[:5000,2]-snd_rcvd_block_last[:5000,4])**2))
+     RMSE[n_runs-1, 2]=numpy.sqrt(numpy.mean((snd_rcvd_block_last_ma[:5000,2]-snd_rcvd_block_last_ma[:5000,4])**2))
+
 
 
