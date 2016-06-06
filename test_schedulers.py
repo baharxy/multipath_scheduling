@@ -342,7 +342,9 @@ if __name__ == "__main__":
                 forward_predicted_delays[ forward_predicted_delays <0 ]=0 # truncate negative samples
                 #assume (block) i.i.d distribution of delays: draw next delays from the same normal distribution
                 predicted_delays_pmf = numpy.r_ [ predicted_delays_last,forward_predicted_delays]
-
+                if n_slots < predicted_delays_pmf.shape[0]:
+                    pdb.set_trace()
+                    predicted_delays_pmf=numpy.delete(predicted_delays_pmf, range(n_slots, predicted_delays_pmf.shape[0]) ,0)
                 #pmf sorting
                 remaining_pkt_set_pmf=numpy.delete (pkt_set, numpy.union1d(snd_rcvd_block_last_wifi [0: s_i , 0] , snd_rcvd_block_last_lte [0: s_i , 0]) )
                 snd_rcvd_block_pmf_wifi, snd_rcvd_block_pmf_lte = sort_block_packets(predicted_delays_pmf,s_i, df, remaining_pkt_set_pmf)
@@ -358,6 +360,8 @@ if __name__ == "__main__":
                 print "calling ma at slot  %d for %dth time"   %(s_i ,nof_pmf_calls)
                 allRcvd= delay_profiles (  df, s_i)
                 predicted_delays_ma= moving_average(allRcvd, s_i, nof_predictions_after_current_slot)
+                if n_slots < predicted_delays_ma.shape[0]:
+                    predicted_delays_ma=numpy.delete(predicted_delays_ma,range(n_slots, predicted_delays_ma.shape[0]) ,0)
                 last_predicted_slot_ma=predicted_delays_ma.shape[0]-1
                 #MA sorting
                 remaining_pkt_set_ma=numpy.delete (pkt_set,  numpy.union1d(snd_rcvd_block_last_ma_wifi [0: s_i , 0], snd_rcvd_block_last_ma_lte [0: s_i , 0]) )
