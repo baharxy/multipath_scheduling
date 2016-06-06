@@ -24,14 +24,15 @@ def delay_profiles(df, slot):
      delayDF.lte [ lte_rcvd_delay_list  ] =  df.LTEDelayPackets [lte_rcvd_delay_list]      
      return delayDF
 
-def update_delay_profiles(df_duplicates, current_sent_times ,feedbackarray,slot, nof_duplicates):
+def update_delay_profiles(df_duplicates, current_sent_times ,feedbackarray_wifi, feedbackarray_lte, ,slot, nof_duplicates):
      
      delayDF = pd.DataFrame(numpy.nan, index= range(0,slot), columns=['wifi', 'lte'] )
-     sent_wifi_slots= numpy.where (feedbackarray [:, 1]== 0) 
-     sent_lte_slots=  numpy.where (feedbackarray [:, 1]== 1) 
-     feedback_times =  feedbackarray  [: , 3]+ 2* ( feedbackarray [: , 4]-  feedbackarray [:, 3] ) 
-     rcvd_wifi_slots= feedbackarray[  (feedback_times  <   current_sent_times[0] ) & (feedbackarray[:,1]==0)   , 0]
-     rcvd_lte_slots= feedbackarray[ ( feedback_times  <   current_sent_times[0])   & (feedbackarray[:,1]==1)   , 0]
+     sent_wifi_slots= feedbackarray_wifi.shape[0]
+     sent_lte_slots=   feedbackarray_lte.shape[0]
+     feedback_times_wifi =  feedbackarray_wifi  [: , 3]+ 2* ( feedbackarray_wifi [: , 4]-  feedbackarray_wifi [:, 3] )
+     feedback_times_lte =  feedbackarray_lte  [: , 3]+ 2* ( feedbackarray_lte [: , 4]-  feedbackarray_lte [:, 3] ) 
+     rcvd_wifi_slots= feedbackarray_wifi[  (feedback_times_wifi  <   current_sent_times[0] )   , 0]
+     rcvd_lte_slots= feedbackarray_lte[ ( feedback_times_lte  <   current_sent_times[0] )    , 0]
      if len(sent_wifi_slots)==len(sent_lte_slots) :
             wifi_rcvd_delay_list = numpy.append(  rcvd_wifi_slots  , numpy.asarray( df_duplicates[df_duplicates['feedbackreceivedWiFi'] <  current_sent_times[0]  ].index.tolist()) )
             lte_rcvd_delay_list= numpy.append(  rcvd_lte_slots ,  numpy.asarray (df_duplicates[df_duplicates ['feedbackreceivedLTE'] <  current_sent_times[1]    ].index.tolist()) )
@@ -247,7 +248,7 @@ if __name__ == "__main__":
             else:
                  duplicates_df= df[:nof_duplicate_pkts]
                  send_times= [ df.iloc [s_i]['WiFiSentTimes'], df.iloc [s_i]['LTESentTimes'] ]
-                 dynamicdf = update_delay_profiles (  duplicates_df, send_times, snd_rcvd_block_last[nof_duplicate_pkts:s_i,:], s_i,  nof_duplicate_pkts)
+                 dynamicdf = update_delay_profiles (  duplicates_df, send_times, snd_rcvd_block_last_wifi[nof_duplicate_pkts:s_i,:], snd_rcvd_block_last_lte[nof_duplicate_pkts:s_i,:], s_i,  nof_duplicate_pkts)
             (ratings, true_o, true_d) = update_list_ratings(dynamicdf)
             
             if len(ratings) > 0 :
