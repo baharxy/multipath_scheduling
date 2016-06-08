@@ -12,17 +12,18 @@ import pandas as pd
 import timeit
 import sys
 from pmf import ProbabilisticMatrixFactorization
-
+from mg import MaxofGaussians
 
 
 
 def delay_profiles(df, slot):
-     delayDF = pd.DataFrame(numpy.nan, index= range(0,slot), columns=['wifi', 'lte'] )
-     wifi_rcvd_delay_list = df[df['feedbackreceivedWiFi'] < df.iloc [slot]['WiFiSentTimes'] ].index.tolist()
-     lte_rcvd_delay_list = df[df['feedbackreceivedLTE'] < df.iloc [slot]['LTESentTimes' ] ].index.tolist()
-     delayDF.wifi [ wifi_rcvd_delay_list ] = df.WiFiDelayPackets [wifi_rcvd_delay_list]
-     delayDF.lte [ lte_rcvd_delay_list  ] =  df.LTEDelayPackets [lte_rcvd_delay_list]      
-     return delayDF
+
+             wifi_rcvd_delay_list = df[df['feedbackreceivedWiFi'] < df.iloc [slot]['WiFiSentTimes'] ].index.tolist()
+             lte_rcvd_delay_list = df[df['feedbackreceivedLTE'] < df.iloc [slot]['LTESentTimes' ] ].index.tolist()
+	     delayDF = pd.DataFrame(numpy.nan, index= range(0,slot), columns=['wifi', 'lte'] )
+	     delayDF.wifi [ wifi_rcvd_delay_list ] = df.WiFiDelayPackets [wifi_rcvd_delay_list]
+	     delayDF.lte [ lte_rcvd_delay_list  ] =  df.LTEDelayPackets [lte_rcvd_delay_list]      
+	     return delayDF
 
 def update_delay_profiles(df_duplicates, current_sent_times ,feedbackarray_wifi, feedbackarray_lte,slot, nof_duplicates):
      delayDF = pd.DataFrame(numpy.nan, index= range(0,slot), columns=['wifi', 'lte'] )
@@ -126,47 +127,93 @@ def round_robin_scheduler(df):
      lte_block_rr= numpy.c_[lte_scheduled_buffer_rr, df['LTESentTimes'], df['LTEArrivalTimes'] ]
      snd_rcvd_block_rr = numpy.r_ [wifi_block_rr, lte_block_rr ]
      return  snd_rcvd_block_rr
-
+####################################################################################################################
 #edpf estimates packet delivery times based on average transmision delays, here assumed propagation delay is zero    
-def edpf_scheduler(df, pkt_length):
+def edpf_scheduler(df, pkt_length, nof_duplicates):
+     wifi_buffer_slot=nof_duplicates
+     lte_buffer_slot=nof_duplicates
+     max_slots=df.shape[0] # maximum number of slots per path because of our traces
      A=[0 , 0] #estimated time that wireless channel becomes available for tranmission
-     estimated_wifi_dlv_edpf=[]
-     estimated_lte_dlv_edpf=[]
-     avg_delay=numpy.asarray([numpy.mean ( df.WiFiDelayPackets) , numpy.mean (df.LTEDelayPackets )])
-     avg_bw = numpy.asarray( [ numpy.mean(pkt_length * 8 /  df.WiFiDelayPackets),  numpy.mean(pkt_length * 8 /  df.LTEDelayPackets) ] ) # avergae over bw of each packet
-     for slot in range(df.shape[0]):
-            estimated_wifi_dlv_edpf.append ( max( df.iloc[slot]['WiFiSentTimes'], A[0] )  + pkt_length * 8 / avg_bw[0] )
-            estimated_lte_dlv_edpf.append  (  max (df.iloc[slot]['LTESentTimes'], A[1] )  + pkt_length * 8  / avg_bw[1] )
-            A=[ estimated_wifi_dlv_edpf[slot],  estimated_lte_dlv_edpf[slot]]     
+     wifi_scheduled_buffer_edpf=range(0, nof_duplicates)
+     lte_scheduled_buffer_edpf=range(0, nof_duplicates)
+     estimated_wifi_dlv_edpf=range(0, nof_duplicates)
+     estimated_lte_dlv_edpf=range(0, nof_duplicates)
+     avg_bw = numpy.asarray( [ numpy.mean(pkt_length * 8 /  numpy.asarray(df.iloc[nof_duplicates:]['WiFiDelayPackets'])),  numpy.mean(pkt_length * 8 / numpy.asarray(df.iloc[nof_duplicates:]['LTEDelayPackets']) ) ] ) # avergae over bw of each packet
+     for pkt in range(nof_duplicates, (df.shape[0])*2 - nof_duplicates):
+            
+            if (wifi_buffer_slot< max_slots  and lte_buffer_slot < max_slots):
+		    estimated_wifi_dlv= max( df.iloc[wifi_buffer_slot]['WiFiSentTimes'], A[0] )  + pkt_length * 8 / avg_bw[0] 
+		    estimated_lte_dlv=  max (df.iloc[lte_buffer_slot]['LTESentTimes'], A[1] )  + pkt_length * 8  / avg_bw[1] 
+		    if (estimated_wifi_dlv < estimated_lte_dlv):
+			wifi_scheduled_buffer_edpf.append(pkt)
+			A[0]= estimated_wifi_dlv
+		        estimated_wifi_dlv_edpf=numpy.append(estimated_wifi_dlv_edpf,estimated_wifi_dlv)
+			wifi_buffer_slot=wifi_buffer_slot+1
+                    else:
+		        lte_scheduled_buffer_edpf.append(pkt)
+		        A[1]= estimated_lte_dlv 
+                        estimated_lte_dlv_edpf=numpy.append(estimated_lte_dlv_edpf, estimated_lte_dlv)
+			lte_buffer_slot=lte_buffer_slot+1
+            elif (wifi_buffer_slot >= max_slots):
+		        lte_scheduled_buffer_edpf.append(pkt)
+		        A[1]= estimated_lte_dlv 
+			estimated_lte_dlv_edpf= numpy.append( estimated_lte_dlv_edpf, max( df.iloc[lte_buffer_slot]['LTESentTimes'], A[0] )  + pkt_length * 8 / avg_bw[0] )
+			lte_buffer_slot=lte_buffer_slot+1
+            elif (lte_buffer_slot >= max_slots):
+		        wifi_scheduled_buffer_edpf.append(pkt)
+		        A[0]= estimated_wifi_dlv 
+			estimated_wifi_dlv_edpf= numpy.append( estimated_wifi_dlv_edpf, max (df.iloc[wifi_buffer_slot]['WiFiSentTimes'], A[1] )  + pkt_length * 8  / avg_bw[1] )
+                        wifi_buffer_slot=wifi_buffer_slot+1
+
      estimated_dlv_edpf =  numpy.append (numpy.asarray(estimated_wifi_dlv_edpf), numpy.asarray(estimated_lte_dlv_edpf) )
-     sorted_slots= numpy.argsort(estimated_dlv_edpf, axis=-1, kind='mergesort')
-     path_sorted = numpy.empty( [10000,1])
-     path_sorted [ sorted_slots < 5000] = 0
-     path_sorted [sorted_slots >= 5000] = 1
-     wifi_scheduled_buffer_edpf = numpy.where(path_sorted == 0 )[0]
-     wifi_block_edpf = numpy.c_[wifi_scheduled_buffer_edpf, numpy.zeros((wifi_scheduled_buffer_edpf.shape[0], 1)), estimated_wifi_dlv_edpf, df['WiFiSentTimes'], df['WiFiArrivalTimes'] ]
-     lte_scheduled_buffer_edpf = numpy.where (path_sorted ==1 ) [0]
-     lte_block_edpf= numpy.c_[lte_scheduled_buffer_edpf, numpy.ones((lte_scheduled_buffer_edpf.shape[0], 1)),estimated_lte_dlv_edpf, df['LTESentTimes'], df['LTEArrivalTimes'] ]
+     wifi_block_edpf = numpy.c_[wifi_scheduled_buffer_edpf, numpy.zeros((len(wifi_scheduled_buffer_edpf), 1)), estimated_wifi_dlv_edpf, df['WiFiSentTimes'], df['WiFiArrivalTimes'] ]
+     lte_block_edpf= numpy.c_[lte_scheduled_buffer_edpf, numpy.ones((len(lte_scheduled_buffer_edpf), 1)),estimated_lte_dlv_edpf, df['LTESentTimes'], df['LTEArrivalTimes'] ]
      snd_rcvd_block_edpf = numpy.r_ [wifi_block_edpf, lte_block_edpf ]
      return  snd_rcvd_block_edpf
+##################################################################
+#sedpf assumes invariant gaussian arrival increments##############
+def sedpf(df,Rcvd_delay_stat, slot, Z_mean, Z_sigma, length_Delta_slot, remaining_packets):
+    
+    Rcvd_arrival_stat_wifi=df.iloc[0:Rcvd_delay_stat.shape[0]]['WiFiSentTimes'] + Rcvd_delay_stat.iloc[:]['wifi']
+    Rcvd_arrival_stat_lte=df.iloc[0:Rcvd_delay_stat.shape[0]]['LTESentTimes'] + Rcvd_delay_stat.iloc[:]['lte']
+    wifi_scheduled_buffer_sedpf=[]
+    lte_scheduled_buffer_sedpf=[]
+    estimated_wifi_dlv_sedpf=[]
+    estimated_lte_dlv_sedpf=[]     
+    rcvd_index_wifi= numpy.asarray (Rcvd_arrival_stat_wifi.index[Rcvd_arrival_stat_wifi.apply(numpy.isfinite)] )
+    rcvd_index_lte= numpy.asarray (Rcvd_arrival_stat_lte.index[Rcvd_arrival_stat_lte.apply(numpy.isfinite)] )          
 
-#sedpf assumes invariant gaussian arrivals : it assume that sent times and delays are both gaussian variables (only makes sense to apply to my traces
-#with fixed transmit rate when transmission rate is higher than the channel bw, then randomness in actual sent time could be a valid assumption
-#def sedpf_scheduler(a_first, transmision_times_mu, transmision_times_sigma, current_slot):
-   ##what is the estimated window length
-   #length_Delta_wifi= math.ceil(3*(transmision_times_mu[0] -transmision_times_sigma[0] )  / transmision_times__mu[0] )
-   #length_Delta_lte= math.ceil (3*(transmision_times_mu[0] -transmision_times_sigma[0] )  / transmision_times__mu[0] )
-   ## estimates the mean arrival(delivery to the physical layer) for slots within a given window
-   #Delta_mean_wifi = range (transmision_times_mu[0],   transmission_times_mu[0]*(length_Delta_wifi )     , transmission_times_mu[0])
-   #Delta_mean_lte = range (transmision_times_mu[1],   transmission_times_mu[1]*(length_Delta_lte  )     , transmission_times_mu[1])
-   #Y_wifi = gassian_appx( Delta_mean_wifi, [transmision_times_sigma[0]]*  length_Delta_wifi   ) + a_first[0] # this is actually random variable Z+a_first
-   #Y_lte = gaussian_appx(  Delta_mean_lte, [transmision_times_sigma[1]]*  length_Delta_lte   ) + a_first[1]
-   #a_slot_wifi= [slot_time_wifi + transmision_times_mu [0], transmission_times_sigma[0] ]
-   #a_slot_lte= [slot_time_lte + transmision_times_mu [1], transmission_times_sigma[1] ]
-   #estimate_reoedering_wifi=guassian_appx ([Y_wifi[0], Y_LTE[0], a_slot_wifi[0] ],[Y_wifi[1], Y_lte[1], a_slot_wifi[1]])
-   #estimate_reoedering_lte=guassian_appx ([Y_wifi[0], Y_LTE[0], a_slot_lte[0] ],[Y_wifi[1], Y_lte[1], a_slot_lte[1]])
-   #numpy.minimum ( estimate_reoedering_wifi
-
+    afirst_index=numpy.array ( [ slot- length_Delta_slot[0],  slot- length_Delta_slot[1] ] )
+    afirst_index_appx=numpy.c_[ rcvd_index_wifi[numpy.argmin (rcvd_index_wifi - afirst_index[0])], rcvd_index_lte[numpy.argmin (rcvd_index_lte - afirst_index[1])]]
+    updated_delta_length=slot- afirst_index_appx +1 # based on available feedback
+    
+    afirst=numpy.array( [Rcvd_arrival_stat_wifi[afirst_index_appx[0,0]], Rcvd_arrival_stat_lte[afirst_index_appx[0,1]] ])
+    Z_wifi= numpy.random.normal(Z_mean[0], Z_sigma[0],updated_delta_length[0,0] )
+    Z_lte= numpy.random.normal(Z_mean[1], Z_sigma[1], updated_delta_length[0,1] )
+    Y_wifi= Z_wifi + afirst[0]
+    Y_lte= Z_lte + afirst[1]
+    LinkStats= numpy.c_[ (Z_mean+afirst).T , Z_sigma.T]
+    mg=MaxofGaussians(LinkStats)
+    best_path=numpy.argmax( mg.gaussian_approx()) 
+    if best_path==0:   
+        wifi_scheduled_buffer_sedpf= remaining_packets[0:updated_delta_length[0,0]] 
+        estimated_wifi_dlv_sedpf=Y_wifi	
+        remaining_lte_pkts= numpy.delete ( remaining_packets  , range(0,updated_delta_length[0,0]))
+        lte_scheduled_buffer_sedpf= remaining_lte_pkts[0:updated_delta_length[0,1]] 
+        estimated_lte_dlv_sedpf=Y_lte
+    else:
+	lte_scheduled_buffer_sedpf= remaining_packets[0:updated_delta_length[0,1]] 
+        estimated_lte_dlv_sedpf=Y_lte	
+        remaining_wifi_pkts= numpy.delete ( remaining_packets  ,  range(0, updated_delta_length[0,1]))
+        wifi_scheduled_buffer_sedpf= remaining_wifi_pkts[0:updated_delta_length[0,0]] 
+        estimated_wifi_dlv_sedpf=Y_wifi
+    
+    last_estimated_slot_wifi=s_i+wifi_scheduled_buffer_sedpf.shape[0]
+    last_estimated_slot_lte=s_i+lte_scheduled_buffer_sedpf.shape[0]
+    wifi_block_sedpf=numpy.c_[wifi_scheduled_buffer_sedpf, numpy.zeros(wifi_scheduled_buffer_sedpf.shape[0]),  estimated_wifi_dlv_sedpf, df.iloc[s_i:last_estimated_slot_wifi]['WiFiSentTimes'], df.iloc[s_i:last_estimated_slot_wifi]['WiFiArrivalTimes'] ]
+    lte_block_sedpf=numpy.c_[lte_scheduled_buffer_sedpf, numpy.ones(lte_scheduled_buffer_sedpf.shape[0]),  estimated_lte_dlv_sedpf, df.iloc[s_i:last_estimated_slot_lte]['LTESentTimes'], df.iloc[s_i:last_estimated_slot_lte]['LTEArrivalTimes'] ]       
+    return  wifi_block_sedpf, lte_block_sedpf
+#########################################################################
 # sort packets t-ransmission times over paths so that they arrive in order
 def sort_block_packets(predicted_delays,s_i, df, remaining_pkt_set):
    
@@ -185,6 +232,7 @@ def sort_block_packets(predicted_delays,s_i, df, remaining_pkt_set):
 
    #snd_rcvd_block = numpy.r_ [wifi_block, lte_block]
    return wifi_block, lte_block
+##########################################################################
 #just computes the reordering delays based on different schedules   
 def reordering_stats (snd_rcvd_block):
   rcvd_block_sorted_by_seq = snd_rcvd_block [numpy.argsort(snd_rcvd_block[:, 0])]
@@ -247,19 +295,8 @@ if __name__ == "__main__":
      expected_reordering_delay = numpy.zeros((n_runs, n_schedulers ))
      std_reordering_delay = numpy.zeros((n_runs, n_schedulers ))
      RMSE = numpy.zeros((n_runs, n_schedulers-1 ))
-     #scheduling for EDPF
-     print "EDPF scheduler running.."
-     snd_rcvd_edpf=edpf_scheduler(df,pkt_length)
-     expected_reordering_delay[n_runs-1,1],std_reordering_delay[n_runs-1,1], edpf_sequenced = reordering_stats(snd_rcvd_edpf)
-     RMSE[n_runs-1,0]=numpy.sqrt(numpy.mean((snd_rcvd_edpf[:,1]-snd_rcvd_edpf[:,3])**2))
-     print "EDPF scheduler finished. Expected reordering delay is:  %f" %expected_reordering_delay[n_runs-1,1]
      
-     #scheduling for RR
-     print "Round Robin scheduler running.. "
-     snd_rcvd_rr=round_robin_scheduler(df)
-     expected_reordering_delay[n_runs-1,0],std_reordering_delay[n_runs-1,0], rr_sequenced  = reordering_stats (snd_rcvd_rr)
-     print "Round Robin scheduler finished.Expected reordering delay is:  %f" %expected_reordering_delay[n_runs-1,0]
- 
+     
     
      for s_i  in range (5, n_slots):
             
@@ -270,6 +307,7 @@ if __name__ == "__main__":
                  duplicates_df= df[:nof_duplicate_pkts]
                  send_times= [ df.iloc [s_i]['WiFiSentTimes'], df.iloc [s_i]['LTESentTimes'] ]
                  dynamicdf = update_delay_profiles (  duplicates_df, send_times, snd_rcvd_block_last_wifi[nof_duplicate_pkts:s_i,:], snd_rcvd_block_last_lte[nof_duplicate_pkts:s_i,:], s_i,  nof_duplicate_pkts)
+            
             (ratings, true_o, true_d) = update_list_ratings(dynamicdf)
             
             if len(ratings) > 0 :
@@ -301,6 +339,7 @@ if __name__ == "__main__":
                      first_arrivals_wifi=  df.iloc[0:nof_duplicate_pkts]['WiFiArrivalTimes']
                      first_arrivals_lte= df.iloc[0:nof_duplicate_pkts]['LTEArrivalTimes'] 
                      # a block  to be populated by #1: pkt id, #2: scheduled path #3: estimate arrival #4: sent time #5: arrival  time
+                     
                      snd_rcvd_block_last_wifi= numpy.c_[numpy.array(range(0,nof_duplicate_pkts)), 3*numpy.ones(nof_duplicate_pkts), numpy.zeros(nof_duplicate_pkts) , first_sentTimes_wifi, first_arrivals_wifi ]
                      snd_rcvd_block_last_lte= numpy.c_[numpy.array(range(0,nof_duplicate_pkts)), 3*numpy.ones(nof_duplicate_pkts), numpy.zeros(nof_duplicate_pkts) , first_sentTimes_wifi, first_arrivals_lte ]
                      # first blocks are the same for all schedulers , because of duplication
@@ -308,20 +347,39 @@ if __name__ == "__main__":
                      snd_rcvd_block_last_ma_lte =snd_rcvd_block_last_lte
                      snd_rcvd_block_last_mmc_wifi =snd_rcvd_block_last_wifi
                      snd_rcvd_block_last_mmc_lte =snd_rcvd_block_last_lte
-               
-                     ## initialise sedpf from previous duplicate packets
-                     #transmision_times_mu=[]
-                     #transmision_times_sigma=[]
-                     #transmision_times_mu.append ( numpy.mean(  numpy.asarray(df.iloc[:nof_duplicate_pkts]['WiFiDelayPackets']) ) )
-                     #transmision_times_mu.append ( numpy.mean(  numpy.asarray(df.iloc[:nof_duplicate_pkts]['LTEDelayPackets']) ) )
-                     #transmision_times_sigma.append (  numpy.std (  numpy.asarray(df.iloc[:nof_duplicate_pkts]['WiFiDelayPackets']) ) )
-                     #transmision_times_sigma.append (  numpy.std (  numpy.asarray(df.iloc[:nof_duplicate_pkts]['LTEDelayPackets']) ) )
-                     #length_Delta_wifi= math.ceil(3*(transmision_times_mu[0] -transmision_times_sigma[0] )  ) #anything within 3sigma of the mean of the distribution
-                     #length_Delta_lte= math.ceil (3*(transmision_times_mu[0] -transmision_times_sigma[0] )   )
-                
-                # calling sedpf/not yet sedpf is messy/ can I apply it to my data?   
+                     snd_rcvd_block_last_sedpf_wifi =snd_rcvd_block_last_wifi
+                     snd_rcvd_block_last_sedpf_lte =snd_rcvd_block_last_lte
+                     #scheduling for RR
+   		     print "Round Robin scheduler running.. "
+                     snd_rcvd_rr=round_robin_scheduler(df)
+                     expected_reordering_delay[n_runs-1,0],std_reordering_delay[n_runs-1,0], rr_sequenced  = reordering_stats (snd_rcvd_rr[nof_duplicate_pkts:,])
+                     print "Round Robin scheduler finished.Expected reordering delay is:  %f" %expected_reordering_delay[n_runs-1,0]
+ 
+		     #scheduling for EDPF
+		     print "EDPF scheduler running.."
+		     snd_rcvd_edpf=edpf_scheduler(df,pkt_length,nof_duplicate_pkts)
+		     expected_reordering_delay[n_runs-1,1],std_reordering_delay[n_runs-1,1], edpf_sequenced = reordering_stats(snd_rcvd_edpf[nof_duplicate_pkts:,])
+		     RMSE[n_runs-1,0]=numpy.sqrt(numpy.mean((snd_rcvd_edpf[nof_duplicate_pkts:,1]-snd_rcvd_edpf[nof_duplicate_pkts:,3])**2))
+		     print "EDPF scheduler finished. Expected reordering delay is:  %f" %expected_reordering_delay[n_runs-1,1]
 
-                #pmf
+
+                     
+                     ## initialise sedpf 1st and 2nd moment stats from previous duplicate packets
+                     Z_mean=numpy.array ([ numpy.mean(  numpy.asarray(df.iloc[:nof_duplicate_pkts]['WiFiArrivalTimes']) - df.iloc[0]['WiFiArrivalTimes']) , numpy.mean( numpy.asarray(df.iloc[:nof_duplicate_pkts]['LTEArrivalTimes'])- df.iloc[0]['LTEArrivalTimes'] ) ] )
+                     Z_sigma=numpy.array ( [ numpy.std(  numpy.asarray(df.iloc[:nof_duplicate_pkts]['WiFiArrivalTimes']) - df.iloc[0]['WiFiArrivalTimes']) , numpy.std( numpy.asarray(df.iloc[:nof_duplicate_pkts]['LTEArrivalTimes'])- df.iloc[0]['LTEArrivalTimes'] ) ]	)	
+                     length_Delta_time=  numpy.maximum ( 3*Z_sigma - Z_mean, 3*Z_sigma + Z_mean )  #  in time
+	             length_Delta_slot= numpy.append( numpy.argmin( (length_Delta_time[0] - numpy.asarray(df.WiFiArrivalTimes[1:nof_duplicate_pkts]- df.WiFiArrivalTimes[0]).T)**2 ), numpy.argmin( (length_Delta_time[1] - numpy.asarray(df.LTEArrivalTimes[1:nof_duplicate_pkts]- df.LTEArrivalTimes[0]).T)**2 ) )
+                     
+
+                ########################SEDPF######################################
+                remaining_pkt_set_sedpf=numpy.delete (pkt_set, numpy.union1d(snd_rcvd_block_last_sedpf_wifi [0: s_i , 0] , snd_rcvd_block_last_sedpf_lte [0: s_i , 0]) )
+                send_times= [ df.iloc [s_i]['WiFiSentTimes'], df.iloc [s_i]['LTESentTimes'] ]
+                dynamicrf= update_delay_profiles ( df[:nof_duplicate_pkts], send_times, snd_rcvd_block_last_sedpf_wifi[nof_duplicate_pkts:s_i,:], snd_rcvd_block_last_sedpf_lte[nof_duplicate_pkts:s_i,:], s_i,  nof_duplicate_pkts)
+                snd_rcvd_block_sedpf_wifi, snd_rcvd_block_sedpf_lte =sedpf(df,dynamicrf, s_i, Z_mean, Z_sigma, length_Delta_slot, remaining_pkt_set_sedpf)
+                snd_rcvd_block_last_sedpf_wifi=numpy.r_ [ snd_rcvd_block_last_sedpf_wifi [0: s_i , ], snd_rcvd_block_sedpf_wifi ]
+                snd_rcvd_block_last_sedpf_lte=numpy.r_ [ snd_rcvd_block_last_sedpf_lte [ 0:s_i , ] , snd_rcvd_block_sedpf_lte ]
+                
+                ##########################pmf#######################################
                 nof_pmf_calls= nof_pmf_calls+1
                 print "calling pmf at slot  %d for %dth time"   %(s_i ,nof_pmf_calls)
                 start_time=timeit.default_timer() # time the execution of the pmf and scheduler's sort
@@ -373,10 +431,10 @@ if __name__ == "__main__":
                 elapsed=timeit.default_timer() - start_time
                 print "pmf for slot no. %d is finished in %f sec with likelihood %f" %(s_i,elapsed, lik)
                 
-                # calling Moving averages
+                ##################################### calling Moving averages##########################
                 start_time_ma=timeit.default_timer() # time the execution of the ma and scheduler's sort
                 print "calling MA+MMC at slot  %d for %dth time"   %(s_i ,nof_pmf_calls)
-                allRcvd= delay_profiles (  df, s_i)
+		allRcvd= delay_profiles (  df, s_i)
                 predicted_delays_ma= moving_average(allRcvd, s_i, nof_predictions_after_current_slot, False)
                 if n_slots < predicted_delays_ma.shape[0]-1:
                     predicted_delays_ma=numpy.delete(predicted_delays_ma,range(n_slots, predicted_delays_ma.shape[0]) ,0)
@@ -416,7 +474,7 @@ if __name__ == "__main__":
                 
      finished=1
      pdb.set_trace()
-     
+     sedpf_data=numpy.r_[snd_rcvd_block_last_sedpf_wifi[:n_slots], snd_rcvd_block_last_sedpf_lte[:n_slots] ]
      pmf_data=numpy.r_[snd_rcvd_block_last_wifi[:n_slots], snd_rcvd_block_last_lte[:n_slots] ]
      ma_data=numpy.r_[snd_rcvd_block_last_ma_wifi[:n_slots], snd_rcvd_block_last_ma_lte[:n_slots] ]
      mmc_data=numpy.r_[snd_rcvd_block_last_mmc_wifi[:n_slots], snd_rcvd_block_last_mmc_lte[:n_slots] ]
