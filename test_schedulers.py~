@@ -283,7 +283,7 @@ if __name__ == "__main__":
      nof_pmf_calls = 0 
      max_nof_predictions_pmf=50
      nof_probes_last = 0 # to make sure that we go through pmf predictions for the first round
-     nof_predictions_after_current_slot=20 # number of predicted delays that    (block length)            
+     nof_predictions_after_current_slot=50 # number of predicted delays that    (block length)            
      nof_probed_slots = 0 # start with no feedback
      probed_bar=0 
      mu_predicted_wifi=[]  # pmf statistics
@@ -408,7 +408,7 @@ if __name__ == "__main__":
                 sigma_predicted_lte.append (numpy.std (predicted_ratings[:,1]))
                 
                 if probed_bar > max_nof_predictions_pmf:
-                    if (nof_pmf_calls==1  or  nof_cuts) <= 0::
+                    if (nof_pmf_calls==1  or  nof_cuts <= 0):
                        predicted_delays_last=predicted_ratings
                     else:
                        predicted_delays_last= numpy.r_ [predicted_delays_last[:nof_cuts],predicted_ratings ]
