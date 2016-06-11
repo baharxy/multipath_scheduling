@@ -121,9 +121,9 @@ def moving_average (feedbacks, slot_n, prediction_length, mmc):
      
 #assigns pkts to slots of each path intermittently 
 def round_robin_scheduler(df):
-     wifi_scheduled_buffer_rr= numpy.array (range (0,9999,2) )
+     wifi_scheduled_buffer_rr= numpy.array (range (0,(df.shape[0])*2-1,2) )
      wifi_block_rr = numpy.c_[wifi_scheduled_buffer_rr, df['WiFiSentTimes'], df['WiFiArrivalTimes']]
-     lte_scheduled_buffer_rr= numpy.array (range (1,10000,2) )
+     lte_scheduled_buffer_rr= numpy.array (range (1,(df.shape[0])*2,2) )
      lte_block_rr= numpy.c_[lte_scheduled_buffer_rr, df['LTESentTimes'], df['LTEArrivalTimes'] ]
      snd_rcvd_block_rr = numpy.r_ [wifi_block_rr, lte_block_rr ]
      return  snd_rcvd_block_rr
@@ -283,7 +283,7 @@ if __name__ == "__main__":
      nof_pmf_calls = 0 
      max_nof_predictions_pmf=50
      nof_probes_last = 0 # to make sure that we go through pmf predictions for the first round
-     nof_predictions_after_current_slot=50 # number of predicted delays that    (block length)            
+     nof_predictions_after_current_slot=20 # number of predicted delays that    (block length)            
      nof_probed_slots = 0 # start with no feedback
      probed_bar=0 
      mu_predicted_wifi=[]  # pmf statistics
@@ -500,7 +500,7 @@ if __name__ == "__main__":
      plt.legend(loc='upper right', frameon=False)
      plt.xlabel('packet number')
      plt.ylabel('Reordering delay (s)')
-     plt.axis([0.0, 10000,0, 0.3])
+     plt.axis([0.0, 10000,0, 0.5])
      plt.show()
      
      
