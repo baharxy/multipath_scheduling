@@ -146,22 +146,22 @@ def edpf_scheduler(df, pkt_length, nof_duplicates):
 		    estimated_lte_dlv=  max (df.iloc[lte_buffer_slot]['LTESentTimes'], A[1] )  + pkt_length * 8  / avg_bw[1] 
 		    if (estimated_wifi_dlv < estimated_lte_dlv):
 			wifi_scheduled_buffer_edpf.append(pkt)
-			A[0]= estimated_wifi_dlv
+			#A[0]= estimated_wifi_dlv
 		        estimated_wifi_dlv_edpf=numpy.append(estimated_wifi_dlv_edpf,estimated_wifi_dlv)
 			wifi_buffer_slot=wifi_buffer_slot+1
                     else:
 		        lte_scheduled_buffer_edpf.append(pkt)
-		        A[1]= estimated_lte_dlv 
+		        #A[1]= estimated_lte_dlv 
                         estimated_lte_dlv_edpf=numpy.append(estimated_lte_dlv_edpf, estimated_lte_dlv)
 			lte_buffer_slot=lte_buffer_slot+1
             elif (wifi_buffer_slot >= max_slots):
 		        lte_scheduled_buffer_edpf.append(pkt)
-		        A[1]= estimated_lte_dlv 
+		        #A[1]= estimated_lte_dlv 
 			estimated_lte_dlv_edpf= numpy.append( estimated_lte_dlv_edpf, max( df.iloc[lte_buffer_slot]['LTESentTimes'], A[0] )  + pkt_length * 8 / avg_bw[0] )
 			lte_buffer_slot=lte_buffer_slot+1
             elif (lte_buffer_slot >= max_slots):
 		        wifi_scheduled_buffer_edpf.append(pkt)
-		        A[0]= estimated_wifi_dlv 
+		        #A[0]= estimated_wifi_dlv 
 			estimated_wifi_dlv_edpf= numpy.append( estimated_wifi_dlv_edpf, max (df.iloc[wifi_buffer_slot]['WiFiSentTimes'], A[1] )  + pkt_length * 8  / avg_bw[1] )
                         wifi_buffer_slot=wifi_buffer_slot+1
         
@@ -237,7 +237,7 @@ def sort_block_packets(predicted_delays,s_i, df, remaining_pkt_set):
    #snd_rcvd_block = numpy.r_ [wifi_block, lte_block]
    return wifi_block, lte_block
 ##########################################################################
-#just computes the reordering delays based on different schedules   
+#just computes the reordering delays for different schedules   
 def reordering_stats (snd_rcvd_block):
   rcvd_block_sorted_by_seq = snd_rcvd_block [numpy.argsort(snd_rcvd_block[:, 0])]
   rcvd_block_sorted_by_seq = numpy.c_ [ rcvd_block_sorted_by_seq, numpy.asarray (numpy.zeros((rcvd_block_sorted_by_seq.shape[0],1)))]
@@ -254,7 +254,9 @@ if __name__ == "__main__":
      with open(sys.argv[1], 'r') as trace_file:
       df=pd.read_csv(trace_file)
      trace_file.close()
- 
+
+     df.iloc[:]['LTEDelayPackets']=  df.iloc[:]['LTEDelayPackets'] +1
+     df.iloc[:]['LTEArrivalTimes']=  df.iloc[:]['LTEArrivalTimes'] +1
      #replace na values with previous (i.e. packet losses are taken care of with some coding process, valid?)
      wifi_delay_padding_list=df.loc[df[pd.isnull(df['WiFiDelayPackets'])].index-1, 'WiFiDelayPackets' ] .values.T.tolist() 
      second_nan_idx_wifi= [map(int, x) for x in numpy.where(numpy.isnan(wifi_delay_padding_list))][0]
@@ -283,7 +285,7 @@ if __name__ == "__main__":
      nof_pmf_calls = 0 
      max_nof_predictions_pmf=50
      nof_probes_last = 0 # to make sure that we go through pmf predictions for the first round
-     nof_predictions_after_current_slot=20 # number of predicted delays that    (block length)            
+     nof_predictions_after_current_slot=50 # number of predicted delays that    (block length)            
      nof_probed_slots = 0 # start with no feedback
      probed_bar=0 
      mu_predicted_wifi=[]  # pmf statistics
@@ -295,7 +297,7 @@ if __name__ == "__main__":
      sigma_rcvd_wifi=[]
      sigma_rcvd_lte=[]
      n_runs=1  # number of simulations
-     n_schedulers=5
+     n_schedulers=6
      expected_reordering_delay = numpy.zeros((n_runs, n_schedulers ))
      std_reordering_delay = numpy.zeros((n_runs, n_schedulers ))
      RMSE = numpy.zeros((n_runs, n_schedulers-1 ))
@@ -330,7 +332,8 @@ if __name__ == "__main__":
                  probed_bar= int( max (0, 10* ( numpy.log(length_lte_ratings)+ numpy.log(length_wifi_ratings) ) ) ) #so we have fair nof lte vs. wifi probes!
             if probed_bar  >  max_nof_predictions_pmf:
                  nof_cuts=min (nof_probed_slots-max_nof_predictions_pmf+1, min(last_lte_idx,last_wifi_idx) )
-                 dynamicdf = dynamicdf.drop(range(0,nof_cuts))
+                 if nof_cuts > 0: 
+                     dynamicdf = dynamicdf.drop(range(0,nof_cuts))
             (ratings, true_o, true_d) = update_list_ratings(dynamicdf)      
             if (probed_bar > 0 and  len(ratings) - nof_probes_last  >  5): # if had 5 more probes compared to the predictions call pmf/ otherwise just copy packets across both paths
                 if nof_pmf_calls==0 :
@@ -366,7 +369,7 @@ if __name__ == "__main__":
 		     RMSE[n_runs-1,0]=numpy.sqrt(numpy.mean((snd_rcvd_edpf[nof_duplicate_pkts:,1]-snd_rcvd_edpf[nof_duplicate_pkts:,3])**2))
 		     print "EDPF scheduler finished. Expected reordering delay is:  %f" %expected_reordering_delay[n_runs-1,1]
 
-
+                     pdb.set_trace()
                      
                      ## initialise sedpf 1st and 2nd moment stats from previous duplicate packets
                      Z_mean=numpy.array ([ numpy.mean(  numpy.asarray(df.iloc[:nof_duplicate_pkts]['WiFiArrivalTimes']) - df.iloc[0]['WiFiArrivalTimes']) , numpy.mean( numpy.asarray(df.iloc[:nof_duplicate_pkts]['LTEArrivalTimes'])- df.iloc[0]['LTEArrivalTimes'] ) ] )
@@ -376,102 +379,100 @@ if __name__ == "__main__":
                      
 
                 ########################SEDPF######################################
-                print "calling sedpf at slot  %d for %dth time"   %(s_i ,nof_pmf_calls)
-                nof_pmf_calls=nof_pmf_calls+1
                 remaining_pkt_set_sedpf=numpy.delete (pkt_set, numpy.union1d(snd_rcvd_block_last_sedpf_wifi [0: s_i , 0] , snd_rcvd_block_last_sedpf_lte [0: s_i , 0]) )
                 send_times= [ df.iloc [s_i]['WiFiSentTimes'], df.iloc [s_i]['LTESentTimes'] ]
                 dynamicrf= update_delay_profiles ( df[:nof_duplicate_pkts], send_times, snd_rcvd_block_last_sedpf_wifi[nof_duplicate_pkts:s_i,:], snd_rcvd_block_last_sedpf_lte[nof_duplicate_pkts:s_i,:], s_i,  nof_duplicate_pkts)
                 snd_rcvd_block_sedpf_wifi, snd_rcvd_block_sedpf_lte =sedpf(df,dynamicrf, s_i, Z_mean, Z_sigma, length_Delta_slot, remaining_pkt_set_sedpf)
                 snd_rcvd_block_last_sedpf_wifi=numpy.r_ [ snd_rcvd_block_last_sedpf_wifi [0: s_i , ], snd_rcvd_block_sedpf_wifi ]
                 snd_rcvd_block_last_sedpf_lte=numpy.r_ [ snd_rcvd_block_last_sedpf_lte [ 0:s_i , ] , snd_rcvd_block_sedpf_lte ]
-                print "finished sedpf " 
-#                ##########################pmf#######################################
-#                nof_pmf_calls= nof_pmf_calls+1
-#                print "calling pmf at slot  %d for %dth time"   %(s_i ,nof_pmf_calls)
-#                start_time=timeit.default_timer() # time the execution of the pmf and scheduler's sort
-#                pmf_instance = ProbabilisticMatrixFactorization( ratings, latent_d=4)
-#                #check to see if the map updates are done correctely
-#                liks = []
-#                
-#                while (pmf_instance.update()):
-#                   lik = pmf_instance.likelihood()
-#                   liks.append(lik)
-#                   #print "L=", lik
-#                   pass
-#                
-#                predicted_ratings= numpy.transpose (numpy.dot(pmf_instance.users, pmf_instance.items.transpose()))   
-#                #predicted_ratings [predicted_ratings < 0] = 0
-#                if not predicted_ratings.shape[1]==2:
-#                	  pdb.set_trace()
-#                mu_predicted_wifi.append (numpy.mean (predicted_ratings[:,0]))
-#                mu_predicted_lte.append (numpy.mean (predicted_ratings[:,1]))
-#                sigma_predicted_wifi.append (numpy.std (predicted_ratings[:,0]))
-#                sigma_predicted_lte.append (numpy.std (predicted_ratings[:,1]))
-#                
-#                if probed_bar > max_nof_predictions_pmf:
-#                    if nof_pmf_calls==1 :
-#                       predicted_delays_last=predicted_ratings
-#                    else:
-#                       predicted_delays_last= numpy.r_ [predicted_delays_last[:nof_cuts],predicted_ratings ]
-#                else:    
-#                    predicted_delays_last=predicted_ratings
-#                   
-#                  
-#                nof_predicted_ratings=predicted_delays_last.shape[0]
-#                nof_draws=s_i-nof_predicted_ratings+nof_predictions_after_current_slot
-#                if nof_draws <= 0:
-#                     pdb.set_trace()
-#                forward_predicted_delays=numpy.c_[numpy.random.normal(mu_predicted_wifi[-1], sigma_predicted_wifi[-1], nof_draws ),  numpy.random.normal(mu_predicted_lte[-1], sigma_predicted_lte[-1], nof_draws )]
-#                forward_predicted_delays[ forward_predicted_delays <0 ]=0 # truncate negative samples
-#                #assume (block) i.i.d distribution of delays: draw next delays from the same normal distribution
-#                predicted_delays_pmf = numpy.r_ [ predicted_delays_last,forward_predicted_delays]
-#                if n_slots < predicted_delays_pmf.shape[0]-1:
-#                    predicted_delays_pmf=numpy.delete(predicted_delays_pmf, range(n_slots, predicted_delays_pmf.shape[0]) ,0)
-#                #pmf sorting
-#                remaining_pkt_set_pmf=numpy.delete (pkt_set, numpy.union1d(snd_rcvd_block_last_wifi [0: s_i , 0] , snd_rcvd_block_last_lte [0: s_i , 0]) )
-#                snd_rcvd_block_pmf_wifi, snd_rcvd_block_pmf_lte = sort_block_packets(predicted_delays_pmf,s_i, df, remaining_pkt_set_pmf)
-#                snd_rcvd_block_last_wifi=numpy.r_ [ snd_rcvd_block_last_wifi [0: s_i , ]  , snd_rcvd_block_pmf_wifi ]
-#                snd_rcvd_block_last_lte=numpy.r_ [ snd_rcvd_block_last_lte [ 0:s_i , ]  , snd_rcvd_block_pmf_lte ]
-#                
-#                nof_probs_last=  len(ratings)
-#                elapsed=timeit.default_timer() - start_time
-#                print "pmf for slot no. %d is finished in %f sec with likelihood %f" %(s_i,elapsed, lik)
-#                
-#                ##################################### calling Moving averages##########################
-#                start_time_ma=timeit.default_timer() # time the execution of the ma and scheduler's sort
-#                print "calling MA+MMC at slot  %d for %dth time"   %(s_i ,nof_pmf_calls)
-#		allRcvd= delay_profiles (  df, s_i)
-#                predicted_delays_ma= moving_average(allRcvd, s_i, nof_predictions_after_current_slot, False)
-#                if n_slots < predicted_delays_ma.shape[0]-1:
-#                    predicted_delays_ma=numpy.delete(predicted_delays_ma,range(n_slots, predicted_delays_ma.shape[0]) ,0)
-#                
-#                #mmc instead of moving averages
-#                col_mean, col_std, predicted_delays_mmc= moving_average(allRcvd, s_i, nof_predictions_after_current_slot, True )
-#                mu_rcvd_wifi.append(col_mean[0])
-#                mu_rcvd_lte.append(col_mean[1])
-#                sigma_rcvd_wifi.append(col_std[0])
-#                sigma_rcvd_lte.append(col_std[1])
-#                if n_slots < predicted_delays_mmc.shape[0]-1:
-#                    predicted_delays_mmc=numpy.delete(predicted_delays_mmc,range(n_slots, predicted_delays_mmc.shape[0]) ,0)
-#                
+                
+                ##########################pmf#######################################
+                nof_pmf_calls= nof_pmf_calls+1
+                print "calling pmf at slot  %d for %dth time"   %(s_i ,nof_pmf_calls)
+                start_time=timeit.default_timer() # time the execution of the pmf and scheduler's sort
+                pmf_instance = ProbabilisticMatrixFactorization( ratings, latent_d=4)
+                #check to see if the map updates are done correctely
+                liks = []
+                
+                while (pmf_instance.update()):
+                   lik = pmf_instance.likelihood()
+                   liks.append(lik)
+                   #print "L=", lik
+                   pass
+                
+                predicted_ratings= numpy.transpose (numpy.dot(pmf_instance.users, pmf_instance.items.transpose()))   
+                #predicted_ratings [predicted_ratings < 0] = 0
+                if not predicted_ratings.shape[1]==2:
+                	  pdb.set_trace()
+                mu_predicted_wifi.append (numpy.mean (predicted_ratings[:,0]))
+                mu_predicted_lte.append (numpy.mean (predicted_ratings[:,1]))
+                sigma_predicted_wifi.append (numpy.std (predicted_ratings[:,0]))
+                sigma_predicted_lte.append (numpy.std (predicted_ratings[:,1]))
+                
+                if probed_bar > max_nof_predictions_pmf:
+                    if (nof_pmf_calls==1  or  nof_cuts <= 0):
+                       predicted_delays_last=predicted_ratings
+                    else:
+                       predicted_delays_last= numpy.r_ [predicted_delays_last[:nof_cuts],predicted_ratings ]
+                else:    
+                    predicted_delays_last=predicted_ratings
+                   
+                  
+                nof_predicted_ratings=predicted_delays_last.shape[0]
+                nof_draws=s_i-nof_predicted_ratings+nof_predictions_after_current_slot
+                if nof_draws <= 0:
+                     pdb.set_trace()
+                forward_predicted_delays=numpy.c_[numpy.random.normal(mu_predicted_wifi[-1], sigma_predicted_wifi[-1], nof_draws ),  numpy.random.normal(mu_predicted_lte[-1], sigma_predicted_lte[-1], nof_draws )]
+                forward_predicted_delays[ forward_predicted_delays <0 ]=0 # truncate negative samples
+                #assume (block) i.i.d distribution of delays: draw next delays from the same normal distribution
+                predicted_delays_pmf = numpy.r_ [ predicted_delays_last,forward_predicted_delays]
+                if n_slots < predicted_delays_pmf.shape[0]-1:
+                    predicted_delays_pmf=numpy.delete(predicted_delays_pmf, range(n_slots, predicted_delays_pmf.shape[0]) ,0)
+                #pmf sorting
+                remaining_pkt_set_pmf=numpy.delete (pkt_set, numpy.union1d(snd_rcvd_block_last_wifi [0: s_i , 0] , snd_rcvd_block_last_lte [0: s_i , 0]) )
+                snd_rcvd_block_pmf_wifi, snd_rcvd_block_pmf_lte = sort_block_packets(predicted_delays_pmf,s_i, df, remaining_pkt_set_pmf)
+                snd_rcvd_block_last_wifi=numpy.r_ [ snd_rcvd_block_last_wifi [0: s_i , ]  , snd_rcvd_block_pmf_wifi ]
+                snd_rcvd_block_last_lte=numpy.r_ [ snd_rcvd_block_last_lte [ 0:s_i , ]  , snd_rcvd_block_pmf_lte ]
+                
+                nof_probs_last=  len(ratings)
+                elapsed=timeit.default_timer() - start_time
+                print "pmf for slot no. %d is finished in %f sec with likelihood %f" %(s_i,elapsed, lik)
+                
+                ##################################### calling Moving averages##########################
+                start_time_ma=timeit.default_timer() # time the execution of the ma and scheduler's sort
+                print "calling MA+MMC at slot  %d for %dth time"   %(s_i ,nof_pmf_calls)
+		allRcvd= delay_profiles (  df, s_i)
+                predicted_delays_ma= moving_average(allRcvd, s_i, nof_predictions_after_current_slot, False)
+                if n_slots < predicted_delays_ma.shape[0]-1:
+                    predicted_delays_ma=numpy.delete(predicted_delays_ma,range(n_slots, predicted_delays_ma.shape[0]) ,0)
+                
+                #mmc instead of moving averages
+                col_mean, col_std, predicted_delays_mmc= moving_average(allRcvd, s_i, nof_predictions_after_current_slot, True )
+                mu_rcvd_wifi.append(col_mean[0])
+                mu_rcvd_lte.append(col_mean[1])
+                sigma_rcvd_wifi.append(col_std[0])
+                sigma_rcvd_lte.append(col_std[1])
+                if n_slots < predicted_delays_mmc.shape[0]-1:
+                    predicted_delays_mmc=numpy.delete(predicted_delays_mmc,range(n_slots, predicted_delays_mmc.shape[0]) ,0)
+                
 
-#                
-#                #MA sorting
-#                remaining_pkt_set_ma=numpy.delete (pkt_set,  numpy.union1d(snd_rcvd_block_last_ma_wifi [0: s_i , 0], snd_rcvd_block_last_ma_lte [0: s_i , 0]) )
-#                snd_rcvd_block_ma_wifi, snd_rcvd_block_ma_lte = sort_block_packets(predicted_delays_ma,s_i, df, remaining_pkt_set_ma)
-#                snd_rcvd_block_last_ma_wifi=numpy.r_ [ snd_rcvd_block_last_ma_wifi [0:s_i, ]  , snd_rcvd_block_ma_wifi ]
-#                snd_rcvd_block_last_ma_lte=numpy.r_ [ snd_rcvd_block_last_ma_lte [0:s_i, ]  , snd_rcvd_block_ma_lte ]
+                
+                #MA sorting
+                remaining_pkt_set_ma=numpy.delete (pkt_set,  numpy.union1d(snd_rcvd_block_last_ma_wifi [0: s_i , 0], snd_rcvd_block_last_ma_lte [0: s_i , 0]) )
+                snd_rcvd_block_ma_wifi, snd_rcvd_block_ma_lte = sort_block_packets(predicted_delays_ma,s_i, df, remaining_pkt_set_ma)
+                snd_rcvd_block_last_ma_wifi=numpy.r_ [ snd_rcvd_block_last_ma_wifi [0:s_i, ]  , snd_rcvd_block_ma_wifi ]
+                snd_rcvd_block_last_ma_lte=numpy.r_ [ snd_rcvd_block_last_ma_lte [0:s_i, ]  , snd_rcvd_block_ma_lte ]
 
-#                #MMC sorting
-#                remaining_pkt_set_mmc=numpy.delete (pkt_set,  numpy.union1d(snd_rcvd_block_last_mmc_wifi [0: s_i , 0], snd_rcvd_block_last_mmc_lte [0: s_i , 0]) )
-#                snd_rcvd_block_mmc_wifi, snd_rcvd_block_mmc_lte = sort_block_packets(predicted_delays_mmc,s_i, df, remaining_pkt_set_mmc)
-#                snd_rcvd_block_last_mmc_wifi=numpy.r_ [ snd_rcvd_block_last_mmc_wifi [0:s_i, ]  , snd_rcvd_block_mmc_wifi ]
-#                snd_rcvd_block_last_mmc_lte=numpy.r_ [ snd_rcvd_block_last_mmc_lte [0:s_i, ]  , snd_rcvd_block_mmc_lte ]
+                #MMC sorting
+                remaining_pkt_set_mmc=numpy.delete (pkt_set,  numpy.union1d(snd_rcvd_block_last_mmc_wifi [0: s_i , 0], snd_rcvd_block_last_mmc_lte [0: s_i , 0]) )
+                snd_rcvd_block_mmc_wifi, snd_rcvd_block_mmc_lte = sort_block_packets(predicted_delays_mmc,s_i, df, remaining_pkt_set_mmc)
+                snd_rcvd_block_last_mmc_wifi=numpy.r_ [ snd_rcvd_block_last_mmc_wifi [0:s_i, ]  , snd_rcvd_block_mmc_wifi ]
+                snd_rcvd_block_last_mmc_lte=numpy.r_ [ snd_rcvd_block_last_mmc_lte [0:s_i, ]  , snd_rcvd_block_mmc_lte ]
 
 
 
-#                elapsed_ma=timeit.default_timer() - start_time_ma
-#                print "MA+MMC for slot no. %d is finished in %f sec" %(s_i,elapsed_ma)
+                elapsed_ma=timeit.default_timer() - start_time_ma
+                print "MA+MMC for slot no. %d is finished in %f sec" %(s_i,elapsed_ma)
 
 
                 
@@ -480,30 +481,49 @@ if __name__ == "__main__":
                 
      finished=1
      pdb.set_trace()
-     sedpf_data=numpy.r_[snd_rcvd_block_last_sedpf_wifi[:n_slots], snd_rcvd_block_last_sedpf_lte[:n_slots] ]
-     pmf_data=numpy.r_[snd_rcvd_block_last_wifi[:n_slots], snd_rcvd_block_last_lte[:n_slots] ]
-     ma_data=numpy.r_[snd_rcvd_block_last_ma_wifi[:n_slots], snd_rcvd_block_last_ma_lte[:n_slots] ]
-     mmc_data=numpy.r_[snd_rcvd_block_last_mmc_wifi[:n_slots], snd_rcvd_block_last_mmc_lte[:n_slots] ]
-     expected_reordering_delay[n_runs-1,2],std_reordering_delay[n_runs-1,2], pmf_sequenced  = reordering_stats(pmf_data)
-     expected_reordering_delay[n_runs-1,3],std_reordering_delay[n_runs-1,3], ma_sequenced = reordering_stats(ma_data)
-     expected_reordering_delay[n_runs-1,4],std_reordering_delay[n_runs-1,4], mmc_sequenced  = reordering_stats(mmc_data)
-     RMSE[n_runs-1, 1]= numpy.sqrt(numpy.mean((pmf_data[:,2]-pmf_data[:,4])**2))
-     RMSE[n_runs-1, 2]=numpy.sqrt(numpy.mean((ma_data[:,2]-ma_data[:,4])**2))
-     RMSE[n_runs-1, 3]=numpy.sqrt(numpy.mean((mmc_data[:,2]-mmc_data[:,4])**2))
+     sedpf_data=numpy.r_[snd_rcvd_block_last_sedpf_wifi[nof_duplicate_pkts:n_slots], snd_rcvd_block_last_sedpf_lte[nof_duplicate_pkts:n_slots] ]
+     pmf_data=numpy.r_[snd_rcvd_block_last_wifi[nof_duplicate_pkts:n_slots], snd_rcvd_block_last_lte[nof_duplicate_pkts:n_slots] ]
+     ma_data=numpy.r_[snd_rcvd_block_last_ma_wifi[nof_duplicate_pkts:n_slots], snd_rcvd_block_last_ma_lte[nof_duplicate_pkts:n_slots] ]
+     mmc_data=numpy.r_[snd_rcvd_block_last_mmc_wifi[nof_duplicate_pkts:n_slots], snd_rcvd_block_last_mmc_lte[nof_duplicate_pkts:n_slots] ]
+     expected_reordering_delay[n_runs-1,2],std_reordering_delay[n_runs-1,2], sedpf_sequenced  = reordering_stats(sedpf_data)
+     expected_reordering_delay[n_runs-1,3],std_reordering_delay[n_runs-1,3], pmf_sequenced  = reordering_stats(pmf_data)
+     expected_reordering_delay[n_runs-1,4],std_reordering_delay[n_runs-1,4], ma_sequenced = reordering_stats(ma_data)
+     expected_reordering_delay[n_runs-1,5],std_reordering_delay[n_runs-1,5], mmc_sequenced  = reordering_stats(mmc_data)
+     RMSE[n_runs-1, 1]= numpy.sqrt(numpy.mean((sedpf_data[:,2]-sedpf_data[:,4])**2))
+     RMSE[n_runs-1, 2]= numpy.sqrt(numpy.mean((pmf_data[:,2]-pmf_data[:,4])**2))
+     RMSE[n_runs-1, 3]=numpy.sqrt(numpy.mean((ma_data[:,2]-ma_data[:,4])**2))
+     RMSE[n_runs-1, 4]=numpy.sqrt(numpy.mean((mmc_data[:,2]-mmc_data[:,4])**2))
 
      plt.figure(1)
-     plt.scatter( range(0,9998),  pmf_sequenced[:,-1], color= 'k'  ) #
-     plt.scatter( range(0,9998),  ma_sequenced[:,-1], color= 'r' ) #
-     plt.scatter( range(0,9998),  mmc_sequenced[:,-1], color= 'g' ) #
-     #plt.scatter( range(0,10000),  edpf_sequenced[:,-1], color= 'r' ) #
-     plt.scatter( range(0,10000),  rr_sequenced[:,-1], color= 'b' ) #
-
+     sedpf=plt.scatter( range(nof_duplicate_pkts,nof_duplicate_pkts+ sedpf_sequenced.shape[0]),  sedpf_sequenced[:,-1]-sedpf_sequenced[:,-3],marker='o', facecolors='none', color= 'k', s=10  , label='SEDPF') 
+     pmf= plt.scatter( range(nof_duplicate_pkts,nof_duplicate_pkts+ pmf_sequenced.shape[0]),  pmf_sequenced[:,-1]-pmf_sequenced[:,-3], marker= '^', facecolors='none', color= 'r' , s=10, label='PMF+MCM') 
+     mcm=plt.scatter( range(nof_duplicate_pkts,nof_duplicate_pkts+mmc_sequenced.shape[0]),  mmc_sequenced[:,-1]- mmc_sequenced[:,-3], marker= 'v', facecolors='none', color= 'g' , s=10, label='MCM') 
+     rr=plt.scatter( range(nof_duplicate_pkts,rr_sequenced.shape[0]+nof_duplicate_pkts),  rr_sequenced[:,-1]-rr_sequenced[:,-3], marker= '.', facecolors='none', color= 'b', s=10, label='Round Robin' ) 
+     plt.legend(loc='upper right', frameon=False)
+     plt.xlabel('packet number')
+     plt.ylabel('Reordering delay (s)')
+     plt.axis([0.0, 10000,0, 0.3])
+     plt.show()
+     
+     
+     plt.figure(2)
+     sedpf=plt.plot( range(nof_duplicate_pkts,nof_duplicate_pkts+ sedpf_sequenced.shape[0]),  sedpf_sequenced[:,-1]-sedpf_sequenced[:,-3], color= 'k', lw=.2 , ls=':' , label='SEDPF') 
+     pmf= plt.plot( range(nof_duplicate_pkts,nof_duplicate_pkts+ pmf_sequenced.shape[0]),  pmf_sequenced[:,-1]-pmf_sequenced[:,-3], color= 'r' , lw=.2, ls='-.', label='PMF+MCM') 
+     mcm=plt.plot( range(nof_duplicate_pkts,nof_duplicate_pkts+mmc_sequenced.shape[0]),  mmc_sequenced[:,-1]- mmc_sequenced[:,-3], color= 'g' , lw=.2, ls='--', label='MCM') 
+     rr=plt.plot( range(nof_duplicate_pkts,rr_sequenced.shape[0]+nof_duplicate_pkts),  rr_sequenced[:,-1]-rr_sequenced[:,-3], color= 'b', lw=.2, ls='-',label='Round Robin' ) 
+     plt.legend(loc='upper right', frameon=False, prop={'size':10}, markerscale=200)
+     plt.xlabel('packet number')
+     plt.ylabel('Reordering delay (s)')
+     plt.axis([0.0, 10000,0, 0.3])
+     plt.show()
+     
+     
      plt.figure(2)
      plt.scatter( range(0,5000), predicted_delays_pmf[:,0], color= 'k', marker ="o", facecolors='none', s=10 ) # predicted wifi delays pmf
      plt.scatter( range(0,5000), predicted_delays_pmf[:,1], color= 'r', marker ="^", facecolors='none', s=10 ) # predicted lte delays pmf
      
      plt.figure(3)
-     plt.scatter( range(0,5000), predicted_delays_mmc[:,0], color= 'k', marker ="o", facecolors='none', s=10 ) # predicted wifi delays pmf
+     plt.scatter( range(0,5000), predicted_delays_sedpf[:,0], color= 'k', marker ="o", facecolors='none', s=10 ) # predicted wifi delays pmf
      plt.scatter( range(0,5000), predicted_delays_mmc[:,1], color= 'r', marker ="^", facecolors='none', s=10 ) # predicted lte delays pmf
 
      plt.show()
