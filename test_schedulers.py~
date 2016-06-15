@@ -437,8 +437,8 @@ if __name__ == "__main__":
                      ## initialise sedpf 1st and 2nd moment stats from all measurements
                      different_deltas=(1,10, 50)
 		     delta_colors=iter(cm.rainbow(numpy.linspace(0,1,len(different_deltas))))
-		     Z_mean=numpy.zeros((len(different_deltas), 2))
-		     Z_sigma=numpy.zeros((len(different_deltas), 2))
+		     Z_mean=numpy.array([])
+		     Z_sigma=numpy.array([])
 		     plt.figure(5)
 		     for index,initial_window_sedpf in enumerate(different_deltas):
 		             increment_wifi=numpy.zeros(df.shape[0]-initial_window_sedpf)
