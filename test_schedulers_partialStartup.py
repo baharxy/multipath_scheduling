@@ -183,6 +183,7 @@ def sedpf2_scheduler(df,snd_rcvd_block_last_sedpf_wifi,snd_rcvd_block_last_sedpf
        
      for pkt in range(nof_duplicates, (df.shape[0])*2 - nof_duplicates):
             print "pkt %d" %(pkt)
+            
             if (wifi_buffer_slot_sedpf < max_slots  and lte_buffer_slot_sedpf < max_slots):
 		    send_times= [ df.iloc [wifi_buffer_slot_sedpf]['WiFiSentTimes'], df.iloc [lte_buffer_slot_sedpf]['LTESentTimes'] ]
 		    dynamicrfwifi, dynamicrflte= update_delay_profiles_sedpf (df[:nof_duplicates], send_times, snd_rcvd_block_last_sedpf_wifi[nof_duplicates:wifi_buffer_slot_sedpf,:], snd_rcvd_block_last_sedpf_lte[nof_duplicates:lte_buffer_slot_sedpf:], wifi_buffer_slot_sedpf,lte_buffer_slot_sedpf,  nof_duplicates)
