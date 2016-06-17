@@ -159,7 +159,8 @@ def edpf_scheduler(df, pkt_length, nof_duplicates):
      estimated_lte_dlv_edpf=range(0, nof_duplicates)
      avg_delay = numpy.asarray( [ numpy.mean( numpy.asarray(df.iloc[:]['WiFiDelayPackets'])),  numpy.mean( numpy.asarray(df.iloc[:]['LTEDelayPackets']) ) ] ) # avergae over bw of each packet
      for pkt in range(nof_duplicates, (df.shape[0])*2 - nof_duplicates):
-            
+            if pkt==9900:
+               pdb.set_trace()
             if (wifi_buffer_slot< max_slots  and lte_buffer_slot < max_slots):
 		    estimated_wifi_dlv= max( df.iloc[wifi_buffer_slot]['WiFiSentTimes'], A[0] )  +  avg_delay[0] 
 		    estimated_lte_dlv=  max (df.iloc[lte_buffer_slot]['LTESentTimes'], A[1] )  + avg_delay[1] 
@@ -183,8 +184,8 @@ def edpf_scheduler(df, pkt_length, nof_duplicates):
      estimated_dlv_edpf =  numpy.append (numpy.asarray(estimated_wifi_dlv_edpf), numpy.asarray(estimated_lte_dlv_edpf) )
      wifi_block_edpf = numpy.c_[wifi_scheduled_buffer_edpf, numpy.zeros((len(wifi_scheduled_buffer_edpf), 1)), estimated_wifi_dlv_edpf, df['WiFiSentTimes'], df['WiFiArrivalTimes'] ]
      lte_block_edpf= numpy.c_[lte_scheduled_buffer_edpf, numpy.ones((len(lte_scheduled_buffer_edpf), 1)),estimated_lte_dlv_edpf, df['LTESentTimes'], df['LTEArrivalTimes'] ]
-     snd_rcvd_block_edpf = numpy.r_ [wifi_block_edpf, lte_block_edpf ]
-     return  snd_rcvd_block_edpf
+     
+     return  wifi_block_edpf, lte_block_edpf
 #############################fill previous arrivals, cause sedpf needs it #########################################
 def update_arrivals_first(Rcvd_wifi,Rcvd_lte,delta,Z_mean, Z_sigma):
      
@@ -296,7 +297,7 @@ def sedpf2_scheduler(df,snd_rcvd_block_last_sedpf_wifi,snd_rcvd_block_last_sedpf
                         wifi_buffer_slot_sedpf=wifi_buffer_slot_sedpf+1
                         
 	    
-    
+     pdb.set_trace()
      estimated_dlv_sedpf =  numpy.append (numpy.asarray(estimated_wifi_dlv_sedpf), numpy.asarray(estimated_lte_dlv_sedpf) )
      wifi_block_sedpf = numpy.c_[wifi_scheduled_buffer_sedpf, numpy.zeros((len(wifi_scheduled_buffer_sedpf), 1)), estimated_wifi_dlv_sedpf, df['WiFiSentTimes'], df['WiFiArrivalTimes'] ]
      lte_block_sedpf= numpy.c_[lte_scheduled_buffer_sedpf, numpy.ones((len(lte_scheduled_buffer_sedpf), 1)),estimated_lte_dlv_sedpf, df['LTESentTimes'], df['LTEArrivalTimes'] ]
@@ -362,6 +363,12 @@ if __name__ == "__main__":
      df.loc[df[pd.isnull(df['WiFiArrivalTimes'])].index,'WiFiArrivalTimes']= wifi_arrival_padding_list
      df.loc[df[pd.isnull(df['LTEArrivalTimes'])].index,'LTEArrivalTimes']= lte_arrival_padding_list
      
+     #dummy delay***for test************************
+     df['LTEDelayPackets']=df['LTEDelayPackets']+5
+     df['LTEArrivalTimes']=df['LTEArrivalTimes']+5
+     df['feedbackreceivedLTE']=df['feedbackreceivedLTE']+5
+     #**********************************************
+     
      # initialise 
      n_slots=df.shape[0] # buffer size per path(link)
      pkt_set=range(0, 2*n_slots) # sum of  the n_slots on each path
@@ -383,6 +390,7 @@ if __name__ == "__main__":
      n_runs=1  # number of simulations
      n_schedulers=6
      expected_reordering_delay = numpy.zeros((n_runs, n_schedulers ))
+     expected_time_towait= numpy.zeros((n_runs, n_schedulers ))
      std_reordering_delay = numpy.zeros((n_runs, n_schedulers ))
      RMSE = numpy.zeros((n_runs, n_schedulers-1 ))
      initial_window_sedpf=10 
@@ -449,11 +457,12 @@ if __name__ == "__main__":
  
 		     #scheduling for EDPF
 		     print "EDPF scheduler running.."
-		     snd_rcvd_edpf=edpf_scheduler(df,pkt_length,nof_duplicate_pkts)
+		     snd_rcvd_edpf_wifi,snd_rcvd_edpf_lte =edpf_scheduler(df,pkt_length,nof_duplicate_pkts)
+		     snd_rcvd_edpf =numpy.r_[snd_rcvd_edpf_wifi[nof_duplicate_pkts:], snd_rcvd_edpf_lte[nof_duplicate_pkts:]]
 		     expected_reordering_delay[n_runs-1,1],std_reordering_delay[n_runs-1,1], edpf_sequenced = reordering_stats(snd_rcvd_edpf[nof_duplicate_pkts:,])
 		     RMSE[n_runs-1,0]=numpy.sqrt(numpy.mean((snd_rcvd_edpf[nof_duplicate_pkts:,2]-snd_rcvd_edpf[nof_duplicate_pkts:,4])**2))
 		     print "EDPF scheduler finished. Expected reordering delay is:  %f" %expected_reordering_delay[n_runs-1,1]
-
+		     pdb.set_trace()
 
                      
                      ## initialise sedpf 1st and 2nd moment stats from previous duplicate packets
@@ -500,7 +509,7 @@ if __name__ == "__main__":
 		     expected_reordering_delay[n_runs-1,2],std_reordering_delay[n_runs-1,2], sedpf_sequenced = reordering_stats(snd_rcvd_sedpf)
 		     RMSE[n_runs-1,1]=numpy.sqrt(numpy.mean((snd_rcvd_sedpf[:,2]-snd_rcvd_sedpf[:,4])**2))
 		     print "SEDPF scheduler finished. Expected reordering delay is:  %f" %expected_reordering_delay[n_runs-1,2]
-
+		     pdb.set_trace()
                     
 		              
 
@@ -555,7 +564,11 @@ if __name__ == "__main__":
      expected_reordering_delay[n_runs-1,2],std_reordering_delay[n_runs-1,2], sedpf_sequenced  = reordering_stats(sedpf_data)
      expected_reordering_delay[n_runs-1,4],std_reordering_delay[n_runs-1,4], ma_sequenced = reordering_stats(ma_data)
      expected_reordering_delay[n_runs-1,5],std_reordering_delay[n_runs-1,5], mmc_sequenced  = reordering_stats(mmc_data)
-     
+
+     expected_time_towait[n_runs-1,0]=numpy.mean(rr_sequenced[:,-1]-rr_sequenced[:, -2])
+     expected_time_towait[n_runs-1,1]=numpy.mean(edpf_sequenced[:,-1]- edpf_sequenced[:, -2])
+     expected_time_towait[n_runs-1,2]=numpy.mean(sedpf_sequenced[:,-1]- sedpf_sequenced[:, -2])
+
 
      RMSE[n_runs-1, 1]= numpy.sqrt(numpy.mean((sedpf_data[:,2]-sedpf_data[:,4])**2))
      RMSE[n_runs-1, 3]=numpy.sqrt(numpy.mean((ma_data[:,2]-ma_data[:,4])**2))
@@ -585,4 +598,8 @@ if __name__ == "__main__":
      plt.show()
      
      
+     plt.figure(3)
+     plt.plot(range(0,edpf_sequenced.shape[0]), edpf_sequenced[:, -2]-edpf_sequenced[:,-1])
+     plt.show()
+
     
