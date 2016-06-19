@@ -158,9 +158,7 @@ def edpf_scheduler(df, pkt_length, nof_duplicates):
      estimated_wifi_dlv_edpf=range(0, nof_duplicates)
      estimated_lte_dlv_edpf=range(0, nof_duplicates)
      avg_delay = numpy.asarray( [ numpy.mean( numpy.asarray(df.iloc[:]['WiFiDelayPackets'])),  numpy.mean( numpy.asarray(df.iloc[:]['LTEDelayPackets']) ) ] ) # avergae over bw of each packet
-     for pkt in range(nof_duplicates, (df.shape[0])*2 - nof_duplicates):
-            if pkt==9900:
-               pdb.set_trace()
+     for pkt in range(nof_duplicates, (df.shape[0])*2 - nof_duplicates): 
             if (wifi_buffer_slot< max_slots  and lte_buffer_slot < max_slots):
 		    estimated_wifi_dlv= max( df.iloc[wifi_buffer_slot]['WiFiSentTimes'], A[0] )  +  avg_delay[0] 
 		    estimated_lte_dlv=  max (df.iloc[lte_buffer_slot]['LTESentTimes'], A[1] )  + avg_delay[1] 
@@ -199,12 +197,18 @@ def update_arrivals_first(Rcvd_wifi,Rcvd_lte,delta,Z_mean, Z_sigma):
          if wifi_finite_elements-int(delta[0])>=0:
              if numpy.isnan(Rcvd_wifi[wifi_finite_elements-int(delta[0])]):
            	Rcvd_wifi[wifi_finite_elements-int(delta[0])]=Rcvd_wifi[wifi_finite_elements]-numpy.random.normal(Z_mean[0],Z_sigma[0],1)  
-           	
+         if wifi_finite_elements+int(delta[0])< Rcvd_wifi.shape[0]:
+             if numpy.isnan(Rcvd_wifi[wifi_finite_elements+int(delta[0])]):
+           	Rcvd_wifi[wifi_finite_elements+int(delta[0])]=Rcvd_wifi[wifi_finite_elements]+numpy.random.normal(Z_mean[0],Z_sigma[0],1)  
+           	  	
         for lte_finite_elements in lte_finite:
           if lte_finite_elements-int(delta[1])>=0:
              if numpy.isnan(Rcvd_lte[lte_finite_elements-int(delta[1])]) :
            	Rcvd_lte[lte_finite_elements-int(delta[1])]=Rcvd_lte[lte_finite_elements]-numpy.random.normal(Z_mean[1],Z_sigma[1],1)    
-           	
+          if lte_finite_elements+int(delta[1])< Rcvd_lte.shape[0]:
+             if numpy.isnan(Rcvd_lte[lte_finite_elements+int(delta[1])]) :
+           	Rcvd_lte[lte_finite_elements+int(delta[1])]=Rcvd_lte[lte_finite_elements]+numpy.random.normal(Z_mean[1],Z_sigma[1],1)    
+           	 	
         return Rcvd_wifi, Rcvd_lte   
         	    	
         Rcvd_wifi, Rcvd_lte= update_arrivals_first(Rcvd_wifi,Rcvd_lte,delta, Z_mean, Z_sigma) 
@@ -228,7 +232,9 @@ def sedpf2_scheduler(df,snd_rcvd_block_last_sedpf_wifi,snd_rcvd_block_last_sedpf
        
      for pkt in range(nof_duplicates, (df.shape[0])*2 - nof_duplicates):
             print "pkt %d" %(pkt)
-            
+            if (pkt == 50):
+            	a=1
+            	pdb.set_trace()
             if (wifi_buffer_slot_sedpf < max_slots  and lte_buffer_slot_sedpf < max_slots):
 		    send_times= [ df.iloc [wifi_buffer_slot_sedpf]['WiFiSentTimes'], df.iloc [lte_buffer_slot_sedpf]['LTESentTimes'] ]
 		    dynamicrfwifi, dynamicrflte= update_delay_profiles_sedpf (df[:nof_duplicates], send_times, snd_rcvd_block_last_sedpf_wifi[nof_duplicates:wifi_buffer_slot_sedpf,:], snd_rcvd_block_last_sedpf_lte[nof_duplicates:lte_buffer_slot_sedpf:], wifi_buffer_slot_sedpf,lte_buffer_slot_sedpf,  nof_duplicates)
@@ -242,6 +248,9 @@ def sedpf2_scheduler(df,snd_rcvd_block_last_sedpf_wifi,snd_rcvd_block_last_sedpf
 		   
 		    rcvd_index_wifi= numpy.asarray (Rcvd_arrival_stat_wifi.index[Rcvd_arrival_stat_wifi.apply(numpy.isfinite)] )
 		    rcvd_index_lte= numpy.asarray (Rcvd_arrival_stat_lte.index[Rcvd_arrival_stat_lte.apply(numpy.isfinite)]) 
+		    
+            # what is the distance 
+
 		    if wifi_buffer_slot_sedpf < length_Delta_slot[0] and lte_buffer_slot_sedpf > length_Delta_slot[1]:             
 		      afirst_index=numpy.array ([wifi_buffer_slot_sedpf- int(wifi_buffer_slot_sedpf),  lte_buffer_slot_sedpf- int(length_Delta_slot[1])])
 		    elif wifi_buffer_slot_sedpf > length_Delta_slot[0] and lte_buffer_slot_sedpf< length_Delta_slot[1]:             
@@ -364,9 +373,9 @@ if __name__ == "__main__":
      df.loc[df[pd.isnull(df['LTEArrivalTimes'])].index,'LTEArrivalTimes']= lte_arrival_padding_list
      
      #dummy delay***for test************************
-     df['LTEDelayPackets']=df['LTEDelayPackets']+5
-     df['LTEArrivalTimes']=df['LTEArrivalTimes']+5
-     df['feedbackreceivedLTE']=df['feedbackreceivedLTE']+5
+     #df['LTEDelayPackets']=df['LTEDelayPackets']+0.1
+     #df['LTEArrivalTimes']=df['LTEArrivalTimes']+0.1
+     #df['feedbackreceivedLTE']=df['LTESentTimes']+ 2 * df['LTEDelayPackets']
      #**********************************************
      
      # initialise 
