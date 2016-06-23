@@ -14,6 +14,11 @@ import timeit
 import sys
 from pmf import ProbabilisticMatrixFactorization
 from mg import MaxofGaussians
+from matplotlib import rc
+rc('font',**{'family':'sans-serif','sans-serif':['Helvetica']})
+## for Palatino and other serif fonts use:
+#rc('font',**{'family':'serif','serif':['Palatino']})
+rc('text', usetex=True)
 
 
 ############ get the feedback times assuming all transmissions receievd##
@@ -157,7 +162,7 @@ def edpf_scheduler(df, pkt_length, nof_duplicates):
      lte_scheduled_buffer_edpf=range(0, nof_duplicates)
      estimated_wifi_dlv_edpf=range(0, nof_duplicates)
      estimated_lte_dlv_edpf=range(0, nof_duplicates)
-     avg_delay = numpy.asarray( [ numpy.mean( numpy.asarray(df.iloc[:]['WiFiDelayPackets'])),  numpy.mean( numpy.asarray(df.iloc[:]['LTEDelayPackets']) ) ] ) # avergae over bw of each packet
+     avg_delay = numpy.asarray( [ numpy.mean( numpy.asarray(df.iloc[:]['WiFiDelayPackets'])),  numpy.mean( numpy.asarray(df.iloc[:]['LTEDelayPackets']) ) ] ) # avergae over delay of each packet
      for pkt in range(nof_duplicates, (df.shape[0])*2 - nof_duplicates): 
             if (wifi_buffer_slot< max_slots  and lte_buffer_slot < max_slots):
 		    estimated_wifi_dlv= max( df.iloc[wifi_buffer_slot]['WiFiSentTimes'], A[0] )  +  avg_delay[0] 
@@ -232,7 +237,8 @@ def sedpf2_scheduler(df,snd_rcvd_block_last_sedpf_wifi,snd_rcvd_block_last_sedpf
        
      for pkt in range(nof_duplicates, (df.shape[0])*2 - nof_duplicates):
             print "pkt %d" %(pkt)
-            
+            if pkt==5061:
+                pdb.set_trace()
             if (wifi_buffer_slot_sedpf < max_slots  and lte_buffer_slot_sedpf < max_slots):
 		    send_times= [ df.iloc [wifi_buffer_slot_sedpf]['WiFiSentTimes'], df.iloc [lte_buffer_slot_sedpf]['LTESentTimes'] ]
 		    dynamicrfwifi, dynamicrflte= update_delay_profiles_sedpf (df[:nof_duplicates], send_times, snd_rcvd_block_last_sedpf_wifi[nof_duplicates:wifi_buffer_slot_sedpf,:], snd_rcvd_block_last_sedpf_lte[nof_duplicates:lte_buffer_slot_sedpf:], wifi_buffer_slot_sedpf,lte_buffer_slot_sedpf,  nof_duplicates)
@@ -383,7 +389,7 @@ if __name__ == "__main__":
      nof_pmf_calls = 0 
      max_nof_predictions_pmf=50
      nof_probes_last = 0 # to make sure that we go through pmf predictions for the first round
-     nof_predictions_after_current_slot=20 # number of predicted delays that    (block length)            
+     nof_predictions_after_current_slot=10 # number of predicted delays that    (block length)            
      nof_probed_slots = 0 # start with no feedback
      probed_bar=0 
      mu_predicted_wifi=[]  # pmf statistics
@@ -466,7 +472,7 @@ if __name__ == "__main__":
 		     print "EDPF scheduler running.."
 		     snd_rcvd_edpf_wifi,snd_rcvd_edpf_lte =edpf_scheduler(df,pkt_length,nof_duplicate_pkts)
 		     snd_rcvd_edpf =numpy.r_[snd_rcvd_edpf_wifi[nof_duplicate_pkts:], snd_rcvd_edpf_lte[nof_duplicate_pkts:]]
-		     expected_reordering_delay[n_runs-1,1],std_reordering_delay[n_runs-1,1], edpf_sequenced = reordering_stats(snd_rcvd_edpf[nof_duplicate_pkts:,])
+		     expected_reordering_delay[n_runs-1,1],std_reordering_delay[n_runs-1,1], edpf_sequenced = reordering_stats(snd_rcvd_edpf)
 		     RMSE[n_runs-1,0]=numpy.sqrt(numpy.mean((snd_rcvd_edpf[nof_duplicate_pkts:,2]-snd_rcvd_edpf[nof_duplicate_pkts:,4])**2))
 		     print "EDPF scheduler finished. Expected reordering delay is:  %f" %expected_reordering_delay[n_runs-1,1]
 		     
@@ -476,7 +482,7 @@ if __name__ == "__main__":
 #                     Z_mean=numpy.array ([ numpy.mean(  numpy.asarray(df.iloc[:nof_duplicate_pkts]['WiFiArrivalTimes']) - df.iloc[0]['WiFiArrivalTimes']) , numpy.mean( numpy.asarray(df.iloc[:nof_duplicate_pkts]['LTEArrivalTimes'])- df.iloc[0]['LTEArrivalTimes'] ) ] )
 #                     Z_sigma=numpy.array ( [ numpy.std(  numpy.asarray(df.iloc[:nof_duplicate_pkts]['WiFiArrivalTimes']) - df.iloc[0]['WiFiArrivalTimes']) , numpy.std( numpy.asarray(df.iloc[:nof_duplicate_pkts]['LTEArrivalTimes'])- df.iloc[0]['LTEArrivalTimes'] ) ]	)
                      ## initialise sedpf 1st and 2nd moment stats from all measurements
-                     different_deltas=(1,10, 50)
+                     different_deltas=(1,10,20,30,40, 50)
 		     delta_colors=iter(cm.rainbow(numpy.linspace(0,1,len(different_deltas))))
 		     Z_mean=numpy.zeros((len(different_deltas), 2))
 		     Z_sigma=numpy.zeros((len(different_deltas), 2))
@@ -490,13 +496,15 @@ if __name__ == "__main__":
 		             		increment_lte[w-initial_window_sedpf]= df.iloc[w]['LTEArrivalTimes'] -df.iloc[w-initial_window_sedpf]['LTEArrivalTimes']
 			     next_color=next(delta_colors)
 			     plt.figure(5)        
-                             plt.hist( increment_wifi,10, lw=2, color=next_color, label='delta= %s' %(str(initial_window_sedpf)) )
-                             plt.legend(loc='upper right', frameon=False,   fontsize=14)
-                             
+                             plt.hist( increment_wifi,30, lw=2, color=next_color, label=r'$\delta$= %s slots' %(str(initial_window_sedpf)) )
+                             plt.legend(loc='upper left', frameon=False,   fontsize=14)
+                             plt.xlabel(r'$r_{s_{i,l_{1}}}- r_{s_{i-\delta,l_{1}}}$ (sec)', fontsize=20)
+                             plt.ylabel('Frequency')
                              plt.figure(6) 	
-                     	     plt.hist( increment_lte,10, lw=2, color=next_color, label='delta= %s' %(str(initial_window_sedpf)) )
+                     	     plt.hist( increment_lte,30, lw=2, color=next_color, label=r'$\delta$= %s slots' %(str(initial_window_sedpf)) )
                      	     plt.legend(loc='upper right', frameon=False,   fontsize=14)
-                     
+                             plt.xlabel(r'$r_{s_{i,l_{2}}}- r_{s_{i-\delta,l_{2}}}$ (sec)', fontsize=20)
+                             plt.ylabel('Frequency')
 			     
 			     
 		             Z_mean[index,:]=  numpy.array ([numpy.mean(increment_wifi) , numpy.mean(increment_lte) ] ) 
@@ -575,14 +583,17 @@ if __name__ == "__main__":
      expected_time_towait[n_runs-1,0]=numpy.mean(rr_sequenced[:,-1]-rr_sequenced[:, -2])
      expected_time_towait[n_runs-1,1]=numpy.mean(edpf_sequenced[:,-1]- edpf_sequenced[:, -2])
      expected_time_towait[n_runs-1,2]=numpy.mean(sedpf_sequenced[:,-1]- sedpf_sequenced[:, -2])
+     expected_time_towait[n_runs-1,4]=numpy.mean(ma_sequenced[:,-1]- ma_sequenced[:, -2])
+     expected_time_towait[n_runs-1,5]=numpy.mean(mmc_sequenced[:,-1]- mmc_sequenced[:, -2])
 
 
      RMSE[n_runs-1, 1]= numpy.sqrt(numpy.mean((sedpf_data[:,2]-sedpf_data[:,4])**2))
      RMSE[n_runs-1, 3]=numpy.sqrt(numpy.mean((ma_data[:,2]-ma_data[:,4])**2))
      RMSE[n_runs-1, 4]=numpy.sqrt(numpy.mean((mmc_data[:,2]-mmc_data[:,4])**2))
      
-     
+     #end to end reordering
      plt.figure(1)
+     sedpf=plt.scatter( range(nof_duplicate_pkts,nof_duplicate_pkts+ edpf_sequenced.shape[0]),  edpf_sequenced[:,-1]-edpf_sequenced[:,-3],marker='o', facecolors='none', color= 'r', s=8  , label='EDPF') 
      sedpf=plt.scatter( range(nof_duplicate_pkts,nof_duplicate_pkts+ sedpf_sequenced.shape[0]),  sedpf_sequenced[:,-1]-sedpf_sequenced[:,-3],marker='o', facecolors='none', color= 'k', s=8  , label='SEDPF') 
      mcm=plt.scatter( range(nof_duplicate_pkts,nof_duplicate_pkts+mmc_sequenced.shape[0]),  mmc_sequenced[:,-1]- mmc_sequenced[:,-3], marker= 'v', facecolors='none', color= 'g' , s=8, label='MCM') 
      rr=plt.scatter( range(nof_duplicate_pkts,rr_sequenced.shape[0]+nof_duplicate_pkts),  rr_sequenced[:,-1]-rr_sequenced[:,-3], marker= '^', facecolors='none', color= 'b', s=8, label='Round Robin' ) 
@@ -591,8 +602,51 @@ if __name__ == "__main__":
      plt.ylabel('Reordering delay (s)', fontsize=20)
      plt.tick_params(labelsize=20)
      plt.show()
-     
+
+     #buffering
      plt.figure(2)
+     plt.scatter( range(nof_duplicate_pkts,nof_duplicate_pkts+ edpf_sequenced.shape[0]),  edpf_sequenced[:,-1]-edpf_sequenced[:,-2],marker='o', facecolors='none', color= 'r', s=8  , label='EDPF') 
+     plt.scatter( range(nof_duplicate_pkts,nof_duplicate_pkts+ sedpf_sequenced.shape[0]),  sedpf_sequenced[:,-1]-sedpf_sequenced[:,-2],marker='o', facecolors='none', color= 'k', s=8  , label='SEDPF') 
+     plt.scatter( range(nof_duplicate_pkts,nof_duplicate_pkts+mmc_sequenced.shape[0]),  mmc_sequenced[:,-1]- mmc_sequenced[:,-2], marker= 'v', facecolors='none', color= 'g' , s=8, label='MCM') 
+     plt.scatter( range(nof_duplicate_pkts,rr_sequenced.shape[0]+nof_duplicate_pkts),  rr_sequenced[:,-1]-rr_sequenced[:,-2], marker= '^', facecolors='none', color= 'b', s=8, label='Round Robin' ) 
+     plt.legend(loc='upper right', frameon=False,  markerscale=4., scatterpoints=1, fontsize=14)
+     plt.xlabel('packet number', fontsize=20)
+     plt.ylabel('Buffering delay (s)', fontsize=20)
+     plt.tick_params(labelsize=20)
+     plt.show()
+
+     # which path?
+     plt.figure(3)
+     spike_range=range(1450,1500)
+     edpf_zoomed=numpy.r_[snd_rcvd_edpf_wifi[spike_range ,:], snd_rcvd_edpf_lte[spike_range ,:]]
+     colors_edpf = numpy.where(edpf_zoomed[:,1] > 0, 'r', 'k')
+     plt.scatter( edpf_zoomed[:,-2],  edpf_zoomed[:,0], marker='o', color= colors_edpf, s=12 ) 
+     plt.legend(loc='upper right', frameon=False,  markerscale=4., scatterpoints=1, fontsize=14)
+     plt.xlabel('Sending Time (s)', fontsize=20)
+     plt.ylabel('Packet seq numbers', fontsize=20)
+     plt.yticks(numpy.arange(min(edpf_zoomed[:,0]), max(edpf_zoomed[:,0])+1, 6.0))
+     plt.tick_params(labelsize=18)
+     plt.figure(4)
+     sedpf_zoomed=numpy.r_[snd_rcvd_sedpf_wifi[spike_range ,:], snd_rcvd_sedpf_lte[spike_range ,:]]
+     colors_sedpf = numpy.where(sedpf_zoomed[:,1] > 0, 'r', 'k')
+     plt.scatter( sedpf_zoomed[:,-2],  sedpf_zoomed[:,0], marker='o', color= colors_sedpf, s=12  ) 
+     plt.legend(loc='upper right', frameon=False,  markerscale=4., scatterpoints=1, fontsize=14)
+     plt.xlabel('Sending Time (s)', fontsize=20)
+     plt.ylabel('Packet seq numbers', fontsize=20)
+     plt.yticks(numpy.arange(min(sedpf_zoomed[:,0]), max(sedpf_zoomed[:,0])+1, 6.0))
+     plt.tick_params(labelsize=18)
+     mmc_zoomed=numpy.r_[snd_rcvd_block_last_mmc_wifi[spike_range ,:], snd_rcvd_block_last_mmc_lte[spike_range ,:]]
+     colors_mmc = numpy.where(mmc_zoomed[:,1] > 0, 'r', 'k')
+     plt.figure(5)
+     plt.scatter( mmc_zoomed[:,-2], mmc_zoomed[:,0], marker='o', color= colors_mmc, s=12  ) 
+     plt.legend(loc='upper right', frameon=False,  markerscale=4., scatterpoints=1, fontsize=14)
+     plt.xlabel('Sending Time (s)', fontsize=20)
+     plt.ylabel('Packet seq numbers', fontsize=20)
+     plt.yticks(numpy.arange(min(mmc_zoomed[:,0]), max(mmc_zoomed[:,0])+1, 6.0))
+     plt.tick_params(labelsize=18)
+     plt.show()
+     
+     plt.figure(6)
      re_sedpf=sedpf_sequenced[:,-1]-sedpf_sequenced[:,-3]
      re_edpf=edpf_sequenced[:,-1]-edpf_sequenced[:,-3]
      re_edpf=edpf_sequenced[:,-1]-edpf_sequenced[:,-3]
@@ -604,9 +658,16 @@ if __name__ == "__main__":
      plt.tick_params(labelsize=20)
      plt.show()
      
-     
-     plt.figure(3)
-     plt.plot(range(0,edpf_sequenced.shape[0]), edpf_sequenced[:, -2]-edpf_sequenced[:,-1])
-     plt.show()
-
     
+     plt.figure(7)
+     edpf_colors = numpy.where(edpf_sequenced[:,1] > 0, 'r', 'k')
+     plt.scatter( edpf_sequenced[:,0], numpy.ones((edpf_sequenced.shape[0],1)) ,marker='o', color= edpf_colors, s=12  , label='1:EDPF') 
+     sedpf_colors = numpy.where(sedpf_sequenced[:,1] > 0, 'r', 'k')
+     plt.scatter( sedpf_sequenced[:,0], 2*numpy.ones((sedpf_sequenced.shape[0],1)) ,marker='^', color= sedpf_colors, s=12  , label='2:SEDPF') 
+     mmc_colors = numpy.where(mmc_sequenced[:,1] > 0, 'r', 'k')
+     plt.scatter( mmc_sequenced[:,0], 3*numpy.ones((mmc_sequenced.shape[0],1)) ,marker='v', color= mmc_colors, s=12  , label='3:MMC') 
+     plt.legend(loc='upper right', frameon=False,  markerscale=4., scatterpoints=1, fontsize=14)
+     plt.xlabel('packet Seq number', fontsize=20)
+     plt.ylabel('Scheduling', fontsize=20)
+     plt.tick_params(labelsize=20)
+     plt.show()

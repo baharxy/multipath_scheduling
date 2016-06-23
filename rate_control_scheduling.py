@@ -19,7 +19,7 @@ from mg import MaxofGaussians
 ########### get the feedback based on previous transmissions#######################
 def update_delay_profiles(current_sent_times ,array_wifi, array_lte,slot):
    
- 
+     
      sent_wifi_slots= array_wifi.shape[0]
      sent_lte_slots=   array_lte.shape[0]
      feedback_times_wifi =  array_wifi  [: , 3]+ 2* ( array_wifi [: , 4]-  array_wifi [:, 3] )
@@ -109,8 +109,8 @@ if __name__ == "__main__":
      std_reordering_delay = numpy.zeros((n_runs, n_schedulers ))
      RMSE = numpy.zeros((n_runs, n_schedulers-1 ))
      best=[] # record of best paths- sedpf
-     wifi_buffer= numpy.zeros(n_slots)
-     lte_buffer= numpy.zeros(n_slots)
+     wifi_buffer= numpy.zeros((n_slots,5))
+     lte_buffer= numpy.zeros((n_slots,5))
      
 
 
@@ -122,31 +122,51 @@ if __name__ == "__main__":
                 nof_calls= nof_calls+1
                 current_sent_times=[df.iloc[s_i]['WiFiSentTimes'], df.iloc[s_i]['LTESentTimes'] ]
                 print "calling LRTT at slot  %d for %dth time"   %(s_i ,nof_calls)
-		allRcvd= update_delay_profiles(current_sent_times , wifi_buffer, lte_buffer ,s_i)
+		allRcvd= update_delay_profiles(current_sent_times , wifi_buffer[:s_i,:] ,  lte_buffer[:s_i,:] , s_i )
 
-                index_ack_rcvd_wifi=  numpy.isfinite(numpy.asarray(allRcvd.wifi))
-                index_ack_rcvd_lte=  numpy.isfinite(numpy.asarray(allRcvd.lte))
+                index_ack_rcvd_wifi=  numpy.where(numpy.isfinite(numpy.asarray(allRcvd.wifi)))[0]
+                index_ack_rcvd_lte=  numpy.where(numpy.isfinite(numpy.asarray(allRcvd.lte)) ) [0]
 
                 
 
                 if len(index_ack_rcvd_wifi)==len(index_ack_rcvd_lte):
-                  wifi_buffer[s_i]= pkt_seq
-                  lte_buffer[s_i]= pkt_seq + 1
+                  wifi_buffer[s_i,:]= numpy.c_[ pkt_seq, 0, 0, df.iloc[s_i]['WiFiSentTimes'], df.iloc[s_i]['WiFiArrivalTimes'] ]
+                  lte_buffer[s_i,:]= numpy.c_[ pkt_seq + 1,1 ,0, df.iloc[s_i]['LTESentTimes'], df.iloc[s_i]['LTEArrivalTimes'] ]
                   pkt_seq= pkt_seq + 2
-                elif len(index_ack_rcvd_wifi) < len(index_ack_rcvd_lte):
-                  wifi_buffer[s_i]= pkt_seq 
-                elif len(index_ack_rcvd_lte) < len(index_ack_rcvd_wifi):
-                  lte_buffer[s_i]= pkt_seq 
-
+                elif len(index_ack_rcvd_wifi) > len(index_ack_rcvd_lte):
+                  wifi_buffer[s_i,:]= numpy.c_[ pkt_seq, 0, 0, df.iloc[s_i]['WiFiSentTimes'], df.iloc[s_i]['WiFiArrivalTimes'] ]
+                  pkt_seq= pkt_seq + 1
+                elif len(index_ack_rcvd_lte) > len(index_ack_rcvd_wifi):
+                  lte_buffer[s_i,:]= numpy.c_[ pkt_seq + 1,1 ,0, df.iloc[s_i]['LTESentTimes'], df.iloc[s_i]['LTEArrivalTimes'] ]
+                  pkt_seq= pkt_seq + 1
 
                 elapsed=timeit.default_timer() - start_time
                 print "LRTT for slot no. %d is finished in %f sec" %(s_i,elapsed)
 
 
-                        
-                
-                
+     wifi_blank_slots = numpy.where(~wifi_buffer.any(axis=1))[0]   
+     lte_blank_slots = numpy.where(~lte_buffer.any(axis=1))[0]               
+     wifi_buffer= numpy.delete(wifi_buffer,wifi_blank_slots, axis=0)   
+     lte_buffer= numpy.delete(lte_buffer,lte_blank_slots, axis=0)   
+     sent_data= numpy.r_ [wifi_buffer, lte_buffer]         
+     expected_reordering_delay,std_reordering_delay, data_sequenced = reordering_stats(sent_data)
+     expected_time_towait=numpy.mean(data_sequenced[:,-1]-data_sequenced[:, -2])
+     pdb.set_trace()           
      finished=1
      
 
-    
+     plt.figure(1)
+     plt.scatter (range(0,sent_data.shape[0]), data_sequenced[:,-1]- data_sequenced[:,-3])
+     plt.legend(loc='upper right', frameon=False,  markerscale=4., scatterpoints=1, fontsize=14)
+     plt.xlabel('packet number', fontsize=20)
+     plt.ylabel('Reordering delay (s)', fontsize=20)
+     plt.tick_params(labelsize=20)
+     plt.show()
+
+     plt.figure(2)
+     plt.scatter (range(0,sent_data.shape[0]), data_sequenced[:,-1]- data_sequenced[:,-2])
+     plt.legend(loc='upper right', frameon=False,  markerscale=4., scatterpoints=1, fontsize=14)
+     plt.xlabel('packet number', fontsize=20)
+     plt.ylabel('Reordering delay (s)', fontsize=20)
+     plt.tick_params(labelsize=20)
+     plt.show()
